@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: billguard-dev
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    environment: dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: billguard-prod
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    environment: prod

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend — lint & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  frontend:
+    name: Frontend — check & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run check
+
+      # VITE_* vars are required at build time — use placeholders for CI
+      # Real values are set in .env.local locally and via GitHub secrets in prod
+      - run: npm run build
+        env:
+          VITE_AUTH0_DOMAIN: ci.auth0.com
+          VITE_AUTH0_CLIENT_ID: ci-client-id
+          VITE_AUTH0_AUDIENCE: https://api.billguard.dev
+          VITE_API_URL: http://localhost:3001
+
+  # Phase 4+: deploy to EKS on push to main
+  # deploy:
+  #   name: Deploy to EKS
+  #   needs: [backend, frontend]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: us-east-1
+  #     - name: Login to ECR
+  #       run: aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
+  #     - name: Build & push backend
+  #       run: |
+  #         docker build -t $ECR_REGISTRY/billguard-backend:${{ github.sha }} ./backend
+  #         docker push $ECR_REGISTRY/billguard-backend:${{ github.sha }}
+  #     - name: Deploy to EKS
+  #       run: |
+  #         aws eks update-kubeconfig --name billguard-cluster
+  #         kubectl set image deployment/billguard-backend api=$ECR_REGISTRY/billguard-backend:${{ github.sha }} -n billguard-prod
+  #         kubectl rollout status deployment/billguard-backend -n billguard-prod

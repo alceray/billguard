@@ -1,0 +1,19 @@
+# Non-sensitive configuration — safe to commit.
+# Sensitive values (API keys, DB passwords) go in secrets.yaml (git-ignored).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billguard-config
+  namespace: billguard-dev
+  labels:
+    app.kubernetes.io/name: billguard
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  LOG_LEVEL: "info"
+  LOCAL_LLM_MODE: "false"
+  # Updated per environment — dev points to in-cluster Postgres
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "billguard"
