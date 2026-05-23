@@ -3,7 +3,7 @@ dist/
 build/
 .env
 .env.local
-k8s/secrets.yaml        # never commit real secrets
+k8s/secrets.yaml
 *.js.map
 .svelte-kit/
 .DS_Store
