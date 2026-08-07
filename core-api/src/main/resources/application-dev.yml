@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  flyway:
+    # Adopt pre-rewrite local volumes whose schema was applied manually.
+    baseline-on-migrate: true
+    baseline-version: 0
+
+logging:
+  level:
+    dev.billguard: ${LOG_LEVEL:debug}

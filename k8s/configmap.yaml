@@ -9,10 +9,12 @@ metadata:
     app.kubernetes.io/name: billguard
     app.kubernetes.io/component: config
 data:
-  NODE_ENV: "production"
+  SPRING_PROFILES_ACTIVE: "prod"
+  APP_ENV: "prod"
   PORT: "3001"
   LOG_LEVEL: "info"
   LOCAL_LLM_MODE: "false"
+  AI_SERVICE_URL: "http://billguard-ai-service:8000"
   # Updated per environment — dev points to in-cluster Postgres
   DATABASE_HOST: "postgres-service"
   DATABASE_PORT: "5432"

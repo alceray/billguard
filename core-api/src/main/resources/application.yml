@@ -1,0 +1,55 @@
+server:
+  port: ${PORT:3001}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+spring:
+  application:
+    name: billguard-core-api
+  threads:
+    virtual:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:billguard}
+    username: ${DATABASE_USER:billguard}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      # Keep /ready within the Kubernetes probe's five-second timeout.
+      connection-timeout: 3000
+      validation-timeout: 2000
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://${AUTH0_DOMAIN}/
+          audiences:
+            - ${AUTH0_AUDIENCE}
+  web:
+    resources:
+      add-mappings: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    dev.billguard: ${LOG_LEVEL:info}
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

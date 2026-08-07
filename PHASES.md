@@ -1,152 +1,115 @@
-# BillGuard — Phase Plan
+# BillGuard - Phase Plan
 
-## Status legend
-- ✅ Done
-- 🔜 Next
-- ⬜ Planned
+Status: Done / Next / Planned
 
----
+## Phase 1 - Foundation (Done)
 
-## Phase 1 — Foundation ✅ (Weeks 1–2)
+Goal: a working authenticated API, AI service seam, Svelte frontend, and Kubernetes-first local environment.
 
-**Goal:** Working backend + auth + K8s-first local env
+### Delivered
 
-### Completed
-- [x] Express + TypeScript, modular architecture (`modules/`, `middleware/`, `utils/`)
-- [x] PostgreSQL schema — users, accounts, transactions, subscriptions, plaid_items, webhook_events
-- [x] Auth0 JWT middleware (`validateJwt`, `requireAuth`)
-- [x] `/api/auth/me` — upsert user on first login
-- [x] `/health` and `/ready` endpoints (used by K8s probes)
-- [x] Graceful shutdown on SIGTERM (drains HTTP + DB pool within 25s)
-- [x] Svelte + SvelteKit scaffold, landing page, empty dashboard
-- [x] Auth store wrapping Auth0 SPA SDK
-- [x] Typed API client (`lib/api.ts`)
-- [x] `kind` cluster manifests: namespaces, ConfigMap, Secret template, Postgres, backend Deployment
-- [x] Liveness + readiness + startup probes on all containers
-- [x] Resource requests/limits on all containers
-- [x] `initContainer` on backend — waits for Postgres before starting
-- [x] GitHub Actions CI — lint + build for backend and frontend
-- [x] Multi-stage Dockerfiles for backend and frontend
+- [x] Java 25 and Spring Boot 4.1 core API with controller/service/repository boundaries
+- [x] PostgreSQL schema owned and applied by Flyway
+- [x] Auth0 RS256 JWT validation through issuer discovery/JWKS and audience checks
+- [x] Atomic, idempotent `POST /api/auth/me` upsert and `GET /api/auth/me`
+- [x] Compatible validation, authentication, expected-error, fallback, and 404 envelopes
+- [x] Public `/health` and database-aware `/ready` endpoints
+- [x] Graceful 25-second Spring shutdown, virtual threads, request size limit, and API-only rate limiting
+- [x] Python 3.12/FastAPI AI service skeleton with a stable `/internal/classify` contract
+- [x] SvelteKit landing page, Auth0 callback, auth store, API client, and dashboard shell
+- [x] Docker Compose and multi-stage non-root images for both backend services
+- [x] kind manifests with namespaces, ConfigMap, Secret template, PostgreSQL, and both service Deployments
+- [x] Liveness/readiness probes, a core API startup probe, resource bounds, and a database initContainer
+- [x] GitHub Actions verification for Java, Python, and the frontend
+- [x] JUnit/MockMvc/Testcontainers and pytest/httpx contract coverage
 
 ### CKAD concepts introduced
-- Deployment, RollingUpdate strategy
-- initContainer
-- Liveness, readiness, startup probes
-- Resource requests/limits
-- ConfigMap + Secret (envFrom)
-- ClusterIP Service
-- Namespaces
 
----
+Deployment, RollingUpdate, initContainer, liveness/readiness/startup probes, resource requests and limits, ConfigMap, Secret, ClusterIP Service, and Namespace.
 
-## Phase 2 — Plaid Integration 🔜 (Weeks 3–4)
+## Phase 2 - Plaid Integration (Next)
 
-**Goal:** Connecting a sandbox bank account populates real transactions in the DB
+Goal: connecting a Plaid sandbox bank account populates transactions safely.
 
 ### To build
-- [ ] Plaid Link — Svelte component wrapping Plaid Link SDK
-- [ ] `POST /api/plaid/link-token` — creates a Plaid Link token for the frontend
-- [ ] `POST /api/plaid/exchange` — exchanges public token for access token (AES-256 encrypt before storing)
-- [ ] `POST /api/plaid/sync` — pulls transactions via `/transactions/sync`, stores with idempotency
-- [ ] `POST /api/webhooks/plaid` — handles `SYNC_UPDATES_AVAILABLE`; deduplicates on `webhook_events.event_id`
-- [ ] BullMQ + Redis — new transactions enqueued for AI processing
-- [ ] BullMQ worker — own Express app + own K8s Deployment
-- [ ] `CronJob` — daily full transaction re-sync (K8s native, no app-level cron)
-- [ ] Dashboard update — connected accounts list, transaction count, last synced
+
+- [ ] Plaid Link Svelte component
+- [ ] `POST /api/plaid/link-token`
+- [ ] `POST /api/plaid/exchange`, encrypting access tokens with AES-256 before storage
+- [ ] `POST /api/plaid/sync` using Plaid transaction IDs for idempotency
+- [ ] `POST /api/webhooks/plaid`, deduplicating webhook event IDs
+- [ ] Transaction classification queue and worker
+- [ ] Kubernetes CronJob for a daily full sync
+- [ ] Connected-account and sync status UI
+
+### Open architecture decision
+
+The previous roadmap assumed BullMQ, but its serialized job format is not a safe cross-language contract for a Java producer/worker design. Before implementing the queue, choose and document either Spring Data Redis/Redisson with a versioned JSON payload or a language-neutral broker. Do not silently reuse the Node-only assumption.
 
 ### CKAD concepts to introduce
-- CronJob
-- Multi-service ClusterIP mesh (Redis + worker + API)
-- Separate Deployment for worker with different resource limits
 
----
+CronJob and a multi-service internal mesh for the broker and worker.
 
-## Phase 3 — AI Detection Microservice ⬜ (Weeks 5–6)
+## Phase 3 - AI Detection (Planned)
 
-**Goal:** Subscriptions detected automatically after bank sync; confidence scores visible in UI
+Goal: the existing Python contract performs real recurring-charge detection and exposes confidence to users.
 
 ### To build
-- [ ] `ai-service` — separate Express app in `backend/src/modules/ai/`, own Dockerfile
-- [ ] LLM prompt: classify transactions as recurring vs one-time, return confidence 0–1
-- [ ] `LOCAL_LLM_MODE=true` flag — swaps OpenAI for Ollama transparently
-- [ ] Accuracy dashboard — track AI classifications vs user overrides, surface false positive rate
-- [ ] Manual override UI — user marks "not a subscription", stored in `subscriptions.user_override`
-- [ ] Socket.IO on backend — push new detections to dashboard in real time
-- [ ] `/metrics` Prometheus endpoint on AI service
 
-### CKAD concepts to introduce
-- HorizontalPodAutoscaler (CPU-based on BullMQ worker)
-- PodDisruptionBudget on AI service (minAvailable: 1)
-- Separate resource profile for AI service (higher memory limit)
+- [ ] Replace the AI classifier stub with OpenAI/Ollama implementations
+- [ ] Version and evaluate the classification prompt and structured output
+- [ ] Persist classifications through the Java-owned application boundary
+- [ ] Accuracy dashboard and false-positive tracking
+- [ ] Manual subscription override UI
+- [ ] Prometheus metrics for the AI service
+- [ ] HPA for classification workers and a PodDisruptionBudget for the AI service
 
----
+### Open architecture decision
 
-## Phase 4 — Cancelation Engine + EKS Deploy ⬜ (Weeks 7–8)
+The previous roadmap assumed Socket.IO. Cross-language protocol compatibility between Java and the Node-centric Socket.IO ecosystem adds avoidable complexity. Evaluate server-sent events for one-way dashboard updates or STOMP/WebSocket for bidirectional messaging before implementation.
 
-**Goal:** Live on EKS with HTTPS, CI/CD deploys on push to main
+## Phase 4 - Cancelation Engine and EKS (Planned)
 
-### To build
-- [ ] Merchant catalog — map subscription names to cancelation method (email, link, phone)
-- [ ] LLM-generated cancelation email + step-by-step instructions per merchant
-- [ ] One-click mailto: launch or copy-to-clipboard in dashboard
-- [ ] Cancelation attempt tracking per user
-- [ ] EKS cluster via `eksctl` — single t3.medium node pool
-- [ ] External Secrets Operator — AWS Secrets Manager → K8s Secrets
-- [ ] Ingress + AWS Load Balancer Controller — TLS via ACM
-- [ ] RDS PostgreSQL (replaces in-cluster Postgres)
-- [ ] ECR image registry
-- [ ] GitHub Actions deploy step — build → push ECR → `kubectl rollout`
-- [ ] NetworkPolicy — ai-service only accepts traffic from backend namespace
+Goal: deploy the product with HTTPS and continuous delivery.
 
-### CKAD concepts to introduce
-- Ingress
-- NetworkPolicy
-- External Secrets (ESO pattern)
+- [ ] Merchant cancelation catalog
+- [ ] AI-generated email and instructions per merchant
+- [ ] Mail launch/copy workflow and attempt tracking
+- [ ] EKS cluster and ECR repositories for core API and AI service
+- [ ] External Secrets Operator backed by AWS Secrets Manager
+- [ ] AWS Load Balancer Controller, Ingress, ACM TLS
+- [ ] RDS PostgreSQL
+- [ ] GitHub Actions image push and rollout
+- [ ] NetworkPolicy allowing AI traffic only from the core workload
 
----
+A single t3.medium (2 vCPU/4 GiB) is likely too tight for the JVM API, Python service, Phase 2 worker, and Redis. Re-size from measured working-set data before deployment.
 
-## Phase 5 — Polish + CKAD Sweep ⬜ (Weeks 9–10)
+## Phase 5 - Polish and CKAD Sweep (Planned)
 
-**Goal:** Every major CKAD workload type touched; demo-ready UI
+- [ ] Refund demand letter generator
+- [ ] Monthly savings summary
+- [ ] Loading, empty, and error states across the frontend
+- [ ] Log sidecar on the AI service
+- [ ] ServiceAccounts, Roles, and RoleBindings
+- [ ] Enforced dev/prod namespace separation
+- [ ] Consistent resource labels and annotations
+- [ ] Architecture diagram and interview reference material
 
-### To build
-- [ ] Refund demand letter generator (AI)
-- [ ] Savings summary — total recovered per month
-- [ ] Error states, loading skeletons, empty states across dashboard
-- [ ] `Job` manifest for one-time DB migrations (replaces manual `kubectl exec`)
-- [ ] Sidecar container on AI service pod — log shipper
-- [ ] RBAC — ServiceAccount + Role + RoleBinding per namespace
-- [ ] Namespace separation enforced: `billguard-prod` vs `billguard-dev`
-- [ ] Label + annotate all resources consistently
-- [ ] README: architecture diagram, CKAD concept map, interview Q&A
-
-### CKAD concepts to introduce
-- Job (batch workload)
-- Sidecar container (multi-container pod)
-- RBAC (ServiceAccount, Role, RoleBinding)
-
----
+Flyway already owns migrations, so the old manual `kubectl exec psql` step and a separate migration Job are no longer required. Revisit a migration Job only if deployment policy later requires schema changes to finish before any new application pod starts.
 
 ## CKAD concept tracker
 
-| Concept | Introduced | Manifest |
+| Concept | Phase | Manifest |
 |---|---|---|
-| Deployment | Phase 1 ✅ | `k8s/backend-deployment.yaml` |
-| RollingUpdate | Phase 1 ✅ | `k8s/backend-deployment.yaml` |
-| initContainer | Phase 1 ✅ | `k8s/backend-deployment.yaml` |
-| Liveness probe | Phase 1 ✅ | `k8s/backend-deployment.yaml`, `k8s/postgres.yaml` |
-| Readiness probe | Phase 1 ✅ | `k8s/backend-deployment.yaml`, `k8s/postgres.yaml` |
-| Startup probe | Phase 1 ✅ | `k8s/backend-deployment.yaml` |
-| Resource requests/limits | Phase 1 ✅ | All manifests |
-| ConfigMap (envFrom) | Phase 1 ✅ | `k8s/configmap.yaml` |
-| Secret (envFrom) | Phase 1 ✅ | `k8s/secrets.template.yaml` |
-| ClusterIP Service | Phase 1 ✅ | `k8s/postgres.yaml`, `k8s/backend-deployment.yaml` |
-| Namespace | Phase 1 ✅ | `k8s/namespaces.yaml` |
-| CronJob | Phase 2 🔜 | `k8s/cronjob.yaml` |
-| HPA | Phase 3 ⬜ | `k8s/hpa.yaml` |
-| PodDisruptionBudget | Phase 3 ⬜ | `k8s/pdb.yaml` |
-| Ingress | Phase 4 ⬜ | `k8s/ingress.yaml` |
-| NetworkPolicy | Phase 4 ⬜ | `k8s/network-policy.yaml` |
-| Job | Phase 5 ⬜ | `k8s/migration-job.yaml` |
-| Sidecar | Phase 5 ⬜ | `k8s/backend-deployment.yaml` update |
-| RBAC | Phase 5 ⬜ | `k8s/rbac.yaml` |
+| Deployment / RollingUpdate | 1 | `k8s/core-api-deployment.yaml`, `k8s/ai-service-deployment.yaml` |
+| initContainer | 1 | `k8s/core-api-deployment.yaml` |
+| Liveness / readiness probes | 1 | Both service manifests and `k8s/postgres.yaml` |
+| Startup probe | 1 | `k8s/core-api-deployment.yaml` |
+| Resource requests / limits | 1 | All workload manifests |
+| ConfigMap / Secret | 1 | `k8s/configmap.yaml`, `k8s/secrets.template.yaml` |
+| ClusterIP Service | 1 | Both service manifests and `k8s/postgres.yaml` |
+| Namespace | 1 | `k8s/namespaces.yaml` |
+| CronJob | 2 | `k8s/cronjob.yaml` (planned) |
+| HPA / PDB | 3 | `k8s/hpa.yaml`, `k8s/pdb.yaml` (planned) |
+| Ingress / NetworkPolicy | 4 | Planned |
+| Sidecar / RBAC | 5 | Planned |

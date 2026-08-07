@@ -1,6 +1,4 @@
-version: '3.9'
-
-# Local development fallback — use kind + skaffold as primary dev env.
+# Local development fallback - use kind as the primary cluster environment.
 # This exists for quick iteration without a cluster.
 
 services:
@@ -14,32 +12,45 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U billguard -d billguard"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  backend:
+  core-api:
     env_file:
-      - ./backend/.env
+      - ./.env
     build:
-      context: ./backend
-      target: build        # Use build stage for hot reload in dev
-    command: npm run dev
+      context: ./core-api
     environment:
-      NODE_ENV: development
+      SPRING_PROFILES_ACTIVE: dev
       PORT: 3001
-      DATABASE_URL: postgresql://billguard:billguard_dev@postgres:5432/billguard
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: billguard
+      DATABASE_USER: billguard
+      DATABASE_PASSWORD: billguard_dev
       LOG_LEVEL: debug
     ports:
       - "3001:3001"
-    volumes:
-      - ./backend/src:/app/src:ro  # Hot reload
     depends_on:
       postgres:
         condition: service_healthy
+
+  ai-service:
+    env_file:
+      - ./.env
+    build:
+      context: ./ai-service
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      APP_ENV: dev
+      LOG_LEVEL: debug
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service/app:/app/app:ro
 
 volumes:
   postgres_data:

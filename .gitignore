@@ -8,3 +8,11 @@ k8s/secrets.yaml
 .svelte-kit/
 .DS_Store
 .idea/
+target/
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+tasks/

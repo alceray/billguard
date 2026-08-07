@@ -7,47 +7,55 @@ on:
     branches: [main]
 
 jobs:
-  backend:
-    name: Backend — lint & build
+  core-api:
+    name: Core API - verify
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
-
+        working-directory: core-api
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - run: ./mvnw -B verify
 
+  ai-service:
+    name: AI service - lint, typecheck & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.0"
+          enable-cache: true
+          cache-dependency-glob: ai-service/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run mypy app
+      - run: uv run pytest
+
+  web-app:
+    name: Web app - check & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-app
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-
-  frontend:
-    name: Frontend — check & build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
+          cache-dependency-path: web-app/package-lock.json
       - run: npm ci
       - run: npm run check
-
-      # VITE_* vars are required at build time — use placeholders for CI
-      # Real values are set in .env.local locally and via GitHub secrets in prod
+      # VITE_* vars are required at build time; use placeholders for CI.
       - run: npm run build
         env:
           VITE_AUTH0_DOMAIN: ci.auth0.com
@@ -55,10 +63,10 @@ jobs:
           VITE_AUTH0_AUDIENCE: https://api.billguard.dev
           VITE_API_URL: http://localhost:3001
 
-  # Phase 4+: deploy to EKS on push to main
+  # Phase 4+: deploy both backend images to EKS on pushes to main.
   # deploy:
   #   name: Deploy to EKS
-  #   needs: [backend, frontend]
+  #   needs: [core-api, ai-service, web-app]
   #   if: github.ref == 'refs/heads/main'
   #   runs-on: ubuntu-latest
   #   steps:
@@ -71,12 +79,16 @@ jobs:
   #         aws-region: us-east-1
   #     - name: Login to ECR
   #       run: aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
-  #     - name: Build & push backend
+  #     - name: Build and push services
   #       run: |
-  #         docker build -t $ECR_REGISTRY/billguard-backend:${{ github.sha }} ./backend
-  #         docker push $ECR_REGISTRY/billguard-backend:${{ github.sha }}
+  #         docker build -t $ECR_REGISTRY/billguard-core-api:${{ github.sha }} ./core-api
+  #         docker push $ECR_REGISTRY/billguard-core-api:${{ github.sha }}
+  #         docker build -t $ECR_REGISTRY/billguard-ai-service:${{ github.sha }} ./ai-service
+  #         docker push $ECR_REGISTRY/billguard-ai-service:${{ github.sha }}
   #     - name: Deploy to EKS
   #       run: |
   #         aws eks update-kubeconfig --name billguard-cluster
-  #         kubectl set image deployment/billguard-backend api=$ECR_REGISTRY/billguard-backend:${{ github.sha }} -n billguard-prod
-  #         kubectl rollout status deployment/billguard-backend -n billguard-prod
+  #         kubectl set image deployment/billguard-core-api api=$ECR_REGISTRY/billguard-core-api:${{ github.sha }} -n billguard-prod
+  #         kubectl set image deployment/billguard-ai-service ai-service=$ECR_REGISTRY/billguard-ai-service:${{ github.sha }} -n billguard-prod
+  #         kubectl rollout status deployment/billguard-core-api -n billguard-prod
+  #         kubectl rollout status deployment/billguard-ai-service -n billguard-prod
