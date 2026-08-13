@@ -1,247 +1,267 @@
 <script lang="ts">
-  import { isAuthenticated, currentUser } from '$stores/auth';
-  import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
-  import { auth } from '$stores/auth';
+  import { onMount } from "svelte";
+  import DashboardShell from "$lib/components/DashboardShell.svelte";
+  import ConnectBankButton from "$lib/components/ConnectBankButton.svelte";
+  import { api } from "$lib/api";
 
-  onMount(() => {
-    if (!$isAuthenticated) goto('/');
-  });
+  interface Account {
+    id: string;
+    name: string;
+    official_name: string | null;
+    type: string;
+    subtype: string | null;
+    mask: string | null;
+  }
+  interface PlaidItem {
+    item_id: string;
+    institution_name: string | null;
+    status: string;
+    last_error: string | null;
+    last_synced_at: string | null;
+    accounts: Account[];
+  }
 
-  const stats = [
-    { label: 'Active subscriptions', value: '—', mono: false },
-    { label: 'Monthly spend',        value: '—',  mono: true  },
-    { label: 'Detected this week',   value: '—',   mono: false },
-  ];
+  let items: PlaidItem[] = [];
+  let loading = true;
+  let syncing = false;
+  let error = "";
+
+  onMount(loadItems);
+
+  async function loadItems() {
+    loading = true;
+    error = "";
+    try {
+      items = await api.get<PlaidItem[]>("/api/plaid/items");
+    } catch (value) {
+      error =
+        value instanceof Error
+          ? value.message
+          : "Could not load connected accounts.";
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function syncNow() {
+    syncing = true;
+    error = "";
+    try {
+      await api.post("/api/plaid/sync", {});
+    } catch (value) {
+      error =
+        value instanceof Error ? value.message : "Could not schedule a sync.";
+    } finally {
+      syncing = false;
+    }
+  }
+
+  function formatTime(value: string | null): string {
+    return value ? new Date(value).toLocaleString() : "Waiting for first sync";
+  }
 </script>
 
-<div class="layout">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="wordmark">BillGuard</div>
-
-    <nav>
-      <a class="nav-item active" href="/dashboard">
-        <span class="icon">▦</span> Overview
-      </a>
-      <a class="nav-item" href="/dashboard/subscriptions">
-        <span class="icon">↻</span> Subscriptions
-      </a>
-      <a class="nav-item disabled" href="#">
-        <span class="icon">⚡</span> Cancelations
-        <span class="pill">Soon</span>
-      </a>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="user-row">
-        <div class="avatar">
-          {#if $currentUser?.picture}
-            <img src={$currentUser.picture} alt={$currentUser.name ?? 'User'} />
-          {:else}
-            <span>{($currentUser?.email ?? 'U')[0].toUpperCase()}</span>
-          {/if}
-        </div>
-        <div class="user-info">
-          <div class="user-name">{$currentUser?.name ?? $currentUser?.email ?? 'User'}</div>
-          <button class="logout-btn" on:click={() => auth.logout()}>Sign out</button>
-        </div>
-      </div>
+<DashboardShell active="overview">
+  <header class="page-header">
+    <div>
+      <h1>Overview</h1>
+      <p>Your connected banks and ingestion status</p>
     </div>
-  </aside>
+    <ConnectBankButton on:connected={loadItems} />
+  </header>
 
-  <!-- Main content -->
-  <main>
-    <header class="page-header">
-      <div>
-        <h2>Overview</h2>
-        <p class="subtitle">Your subscription activity at a glance</p>
-      </div>
-    </header>
-
-    <!-- Stats row -->
-    <div class="stats-row">
-      {#each stats as stat}
-        <div class="stat-card">
-          <div class="stat-label">{stat.label}</div>
-          <div class="stat-value" class:mono={stat.mono}>{stat.value}</div>
-        </div>
-      {/each}
-    </div>
-
-    <!-- Empty state -->
+  {#if error}<div class="error" role="alert">{error}</div>{/if}
+  {#if loading}
+    <div class="state">Loading connected accounts…</div>
+  {:else if items.length === 0}
     <div class="empty-state">
-      <div class="empty-icon">🔗</div>
-      <h3>Connect your bank to get started</h3>
+      <div class="empty-icon">↗</div>
+      <h2>Connect your bank to get started</h2>
       <p>
-        BillGuard uses Plaid to securely read your transactions.<br />
-        We never store your credentials.
+        BillGuard uses Plaid to read transactions. Your bank credentials never
+        reach BillGuard.
       </p>
-      <!-- Plaid Link button added in Phase 2 -->
-      <button class="connect-btn" disabled>
-        Connect bank account
-        <span class="tag">Coming in Phase 2</span>
+      <ConnectBankButton on:connected={loadItems} />
+    </div>
+  {:else}
+    <div class="section-heading">
+      <div>
+        <h2>Connected accounts</h2>
+        <p>
+          {items.length} connected institution{items.length === 1 ? "" : "s"}
+        </p>
+      </div>
+      <button
+        class="secondary"
+        type="button"
+        disabled={syncing}
+        on:click={syncNow}
+      >
+        {syncing ? "Scheduling…" : "Sync now"}
       </button>
     </div>
-  </main>
-</div>
+    <div class="items">
+      {#each items as item}
+        <section class="item-card">
+          <div class="item-header">
+            <div>
+              <h3>{item.institution_name ?? "Connected institution"}</h3>
+              <p>Last synced: {formatTime(item.last_synced_at)}</p>
+            </div>
+            <span class:error-status={item.status !== "healthy"} class="status"
+              >{item.status.replaceAll("_", " ")}</span
+            >
+          </div>
+          {#if item.last_error}<p class="item-error">{item.last_error}</p>{/if}
+          <div class="accounts">
+            {#each item.accounts as account}
+              <div class="account-row">
+                <div>
+                  <strong>{account.name}</strong><span
+                    >{account.subtype ?? account.type}</span
+                  >
+                </div>
+                <span class="mask"
+                  >{account.mask ? `•••• ${account.mask}` : "No mask"}</span
+                >
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </div>
+    <a class="transactions-link" href="/dashboard/transactions"
+      >View transactions →</a
+    >
+  {/if}
+</DashboardShell>
 
 <style>
-  .layout {
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    min-height: 100dvh;
-  }
-
-  /* ── Sidebar ─────────────────────────────── */
-  .sidebar {
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    padding: 24px 16px;
-    position: sticky;
-    top: 0;
-    height: 100dvh;
-    overflow-y: auto;
-  }
-
-  .wordmark {
-    font-family: var(--font-mono);
-    font-size: 15px;
-    color: var(--accent);
-    letter-spacing: -0.02em;
-    padding: 4px 8px;
-    margin-bottom: 32px;
-  }
-
-  nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 1;
-  }
-
-  .nav-item {
-    display: flex;
+  .page-header,
+  .section-heading,
+  .item-header,
+  .account-row {
     align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
-    border-radius: 7px;
-    color: var(--text-muted);
-    font-size: 14px;
-    text-decoration: none;
-    transition: background 0.1s, color 0.1s;
-  }
-
-  .nav-item:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
-  .nav-item.active { background: var(--surface-2); color: var(--text); }
-  .nav-item.disabled { opacity: 0.4; pointer-events: none; }
-
-  .icon { font-size: 14px; width: 18px; text-align: center; }
-
-  .pill {
-    margin-left: auto;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 6px;
-    color: var(--text-muted);
-  }
-
-  .sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
-
-  .user-row { display: flex; align-items: center; gap: 10px; }
-
-  .avatar {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; color: var(--text-muted); flex-shrink: 0;
-  }
-  .avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-  .user-info { min-width: 0; }
-  .user-name { font-size: 13px; font-weight: 500; truncate: ellipsis; overflow: hidden; white-space: nowrap; }
-  .logout-btn {
-    font-size: 12px; color: var(--text-muted); background: none;
-    border: none; cursor: pointer; padding: 0; font-family: var(--font-sans);
-  }
-  .logout-btn:hover { color: var(--danger); }
-
-  /* ── Main ────────────────────────────────── */
-  main {
-    padding: 36px 40px;
-    max-width: 960px;
-  }
-
-  .page-header {
     display: flex;
-    align-items: flex-start;
     justify-content: space-between;
+    gap: 20px;
+  }
+  .page-header {
     margin-bottom: 32px;
   }
-
-  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
-  .subtitle { color: var(--text-muted); font-size: 14px; }
-
-  /* ── Stats ───────────────────────────────── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    margin-bottom: 40px;
+  h1 {
+    font-size: 24px;
+    letter-spacing: -0.02em;
   }
-
-  .stat-card {
+  h2 {
+    font-size: 18px;
+  }
+  h3 {
+    font-size: 16px;
+  }
+  p {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .state,
+  .empty-state,
+  .item-card,
+  .error {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px 24px;
   }
-
-  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
-  .stat-value { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
-  .stat-value.mono { font-family: var(--font-mono); }
-
-  /* ── Empty state ─────────────────────────── */
+  .state {
+    color: var(--text-muted);
+    padding: 36px;
+  }
+  .error {
+    color: var(--danger);
+    margin-bottom: 20px;
+    padding: 12px 16px;
+  }
   .empty-state {
-    background: var(--surface);
-    border: 1px dashed var(--border);
-    border-radius: var(--radius);
     padding: 64px 40px;
     text-align: center;
   }
-
-  .empty-icon { font-size: 36px; margin-bottom: 16px; }
-  h3 { font-size: 18px; font-weight: 500; margin-bottom: 10px; }
-  .empty-state p { color: var(--text-muted); font-size: 14px; line-height: 1.7; margin-bottom: 28px; }
-
-  .connect-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--surface-2);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 24px;
-    font-family: var(--font-sans);
-    font-size: 14px;
-    cursor: not-allowed;
+  .empty-state p {
+    margin: 10px auto 24px;
+    max-width: 520px;
   }
-
-  .tag {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    background: var(--bg);
+  .empty-icon {
+    color: var(--accent);
+    font-size: 32px;
+    margin-bottom: 12px;
+  }
+  .section-heading {
+    margin-bottom: 16px;
+  }
+  .secondary {
+    background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 7px;
+    border-radius: 7px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    padding: 8px 14px;
+  }
+  .secondary:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+  .items {
+    display: grid;
+    gap: 14px;
+  }
+  .item-card {
+    padding: 20px;
+  }
+  .item-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+  }
+  .status {
+    background: var(--accent-dim);
+    border-radius: 999px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 9px;
+    text-transform: capitalize;
+  }
+  .status.error-status {
+    background: var(--surface-2);
+    color: var(--danger);
+  }
+  .item-error {
+    color: var(--danger);
+    margin-top: 10px;
+  }
+  .accounts {
+    display: grid;
+  }
+  .account-row {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 2px;
+  }
+  .account-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  .account-row strong {
+    display: block;
+    font-size: 14px;
+  }
+  .account-row span {
     color: var(--text-muted);
+    font-size: 12px;
+    text-transform: capitalize;
+  }
+  .mask {
+    font-family: var(--font-mono);
+  }
+  .transactions-link {
+    display: inline-block;
+    margin-top: 20px;
   }
 </style>

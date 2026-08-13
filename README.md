@@ -23,12 +23,15 @@ The browser talks only to the core API on port 3001. The Python service listens 
 - Node.js 20+
 - kind and kubectl for the Kubernetes workflow
 - An Auth0 Single Page Application and API
+- A Plaid Sandbox application
+- cloudflared (only for receiving Plaid webhooks during local testing)
 
 ## Quick start with Docker Compose
 
 ```powershell
 Copy-Item .env.example .env
-# Set AUTH0_DOMAIN and AUTH0_AUDIENCE in .env.
+# Set the Auth0 and Plaid values in .env.
+# Generate TOKEN_ENCRYPTION_KEY with: openssl rand -base64 32
 
 docker compose up --build
 ```
@@ -47,7 +50,7 @@ AI service: http://localhost:8000
 
 Web app: http://localhost:5173
 
-Flyway applies the database schema when `core-api` starts; there is no manual migration step.
+Flyway applies the database schema when `core-api` starts; there is no manual migration step. Compose starts a separate worker from the same core API image. Only that worker polls the Postgres job queue.
 
 ## Run services natively
 
@@ -61,6 +64,29 @@ Set-Location ..\ai-service
 uv sync --locked
 uv run uvicorn app.main:app --reload --port 8000
 ```
+
+## Plaid Sandbox setup
+
+Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, and a base64-encoded 32-byte `TOKEN_ENCRYPTION_KEY` in `.env`. Keep `PLAID_ENV=sandbox`.
+
+For local webhooks, start a public tunnel before connecting an Item:
+
+```powershell
+cloudflared tunnel --url http://localhost:3001
+```
+
+Set `PLAID_WEBHOOK_URL` to the generated URL plus `/api/webhooks/plaid`, then restart the core API and worker. The webhook URL is attached when BillGuard creates the Link token.
+
+The Phase 2 fixture is [fixtures/plaid/user_custom.json](fixtures/plaid/user_custom.json). In Plaid Link's Sandbox credential screen, use `user_custom` as the username and paste the minified fixture JSON as the password. This PowerShell command copies it in that form:
+
+```powershell
+Get-Content fixtures/plaid/user_custom.json -Raw |
+  ConvertFrom-Json |
+  ConvertTo-Json -Depth 20 -Compress |
+  Set-Clipboard
+```
+
+The fixture includes fixed monthly, weekly, and annual streams plus a variable utility, an irregular near-miss, and one-off noise. After Link succeeds, the exchange creates a durable `sync_item` job; the worker imports transaction pages and advances the Plaid cursor atomically with each page.
 
 Verification commands:
 
@@ -91,6 +117,8 @@ kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/core-api-deployment.yaml
 kubectl apply -f k8s/ai-service-deployment.yaml
+kubectl apply -f k8s/worker-deployment.yaml
+kubectl apply -f k8s/cronjob.yaml
 
 kubectl port-forward -n billguard-dev svc/billguard-core-api-service 3001:80
 ```
@@ -112,6 +140,12 @@ Build and load `billguard-core-api:latest` and `billguard-ai-service:latest` int
 | `OLLAMA_BASE_URL` | AI service | Future local model endpoint |
 | `OPENAI_API_KEY` | AI service | Unused until Phase 3 |
 | `AI_SERVICE_URL` | Core API | In-cluster AI service URL for Phase 3 |
+| `PLAID_CLIENT_ID`, `PLAID_SECRET` | Core API/worker | Plaid application credentials |
+| `PLAID_ENV` | Core API/worker | `sandbox` locally; only `production` is also accepted |
+| `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES` | Core API/worker | Comma-separated Link configuration |
+| `PLAID_WEBHOOK_URL` | Core API | Public `/api/webhooks/plaid` URL attached to Link tokens |
+| `TOKEN_ENCRYPTION_KEY` | Core API/worker/CronJob | Required base64-encoded 32-byte AES key |
+| `BILLGUARD_WORKER_ENABLED` | Core API/worker | False on API replicas; true only on queue workers |
 
 Web app variables live in `web-app/.env.local`: `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`, and `VITE_API_URL`.
 
@@ -119,12 +153,15 @@ Web app variables live in `web-app/.env.local`: `VITE_AUTH0_DOMAIN`, `VITE_AUTH0
 
 ```text
 billguard/
-|-- core-api/                 # Java/Spring API, auth, Flyway schema
+|-- core-api/                 # Java/Spring API, Plaid ingestion, jobs, Flyway schema
 |-- ai-service/               # Python/FastAPI internal classifier contract
 |-- web-app/                  # SvelteKit browser application
+|-- fixtures/plaid/           # Deterministic Plaid Sandbox custom user
 |-- k8s/
 |   |-- core-api-deployment.yaml
 |   |-- ai-service-deployment.yaml
+|   |-- worker-deployment.yaml
+|   |-- cronjob.yaml
 |   |-- postgres.yaml
 |   |-- configmap.yaml
 |   `-- secrets.template.yaml
@@ -138,9 +175,11 @@ billguard/
 |---|---|
 | `core-api-deployment.yaml` | Deployment, RollingUpdate, initContainer, three probe types, resources, ConfigMap/Secret |
 | `ai-service-deployment.yaml` | Internal ClusterIP, RollingUpdate, liveness/readiness probes, separate resource profile |
+| `worker-deployment.yaml` | Pull-based Deployment without a Service, queue concurrency, probes and resource bounds |
+| `cronjob.yaml` | Scheduled headless enqueue job, forbidden overlap, retry/history policies |
 | `postgres.yaml` | Stateful storage and internal database service |
 | `namespaces.yaml` | Environment isolation |
 
-Local 768 MiB container measurements on 2026-08-07 showed a 4.33-second cold Spring startup in both modes and idle memory of 241.9 MiB without compact object headers versus 232.2 MiB with them. The 384 MiB request and 768 MiB limit therefore retain headroom, but the observed idle saving was about 4%, not the theoretical 20%. Re-profile under Phase 2 load before tightening. A single t3.medium will likely be tight once the worker and Redis are added.
+Local 768 MiB container measurements on 2026-08-07 showed a 4.33-second cold Spring startup in both modes and idle memory of 241.9 MiB without compact object headers versus 232.2 MiB with them. The 384 MiB request and 768 MiB limit therefore retain headroom, but the observed idle saving was about 4%, not the theoretical 20%. Re-profile under Phase 2 load before tightening. A single t3.medium will likely be tight once the worker is added - it is a second JVM with its own heap, though the Postgres-backed job queue avoids a separate broker workload.
 
 See [PHASES.md](PHASES.md) for the roadmap.

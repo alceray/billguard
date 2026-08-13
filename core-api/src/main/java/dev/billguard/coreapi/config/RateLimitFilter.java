@@ -39,7 +39,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/");
+        String path = request.getRequestURI();
+        return !path.startsWith("/api/") || path.startsWith("/api/webhooks/");
     }
 
     @Override

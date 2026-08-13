@@ -53,3 +53,20 @@ logging:
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+
+billguard:
+  encryption:
+    key: ${TOKEN_ENCRYPTION_KEY:}
+  plaid:
+    env: ${PLAID_ENV:sandbox}
+    client-id: ${PLAID_CLIENT_ID:}
+    secret: ${PLAID_SECRET:}
+    webhook-url: ${PLAID_WEBHOOK_URL:}
+    products: ${PLAID_PRODUCTS:transactions}
+    country-codes: ${PLAID_COUNTRY_CODES:US}
+    base-url: ${PLAID_BASE_URL:}
+  worker:
+    enabled: ${BILLGUARD_WORKER_ENABLED:false}
+    poll-delay: ${BILLGUARD_WORKER_POLL_DELAY:2000}
+    batch-size: ${BILLGUARD_WORKER_BATCH_SIZE:10}
+    stale-after: ${BILLGUARD_WORKER_STALE_AFTER:PT10M}

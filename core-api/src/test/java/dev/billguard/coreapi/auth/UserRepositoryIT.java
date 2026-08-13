@@ -17,7 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = {
     "AUTH0_DOMAIN=test.auth0.com",
     "AUTH0_AUDIENCE=https://api.billguard.test",
-    "DATABASE_PASSWORD=test"
+    "DATABASE_PASSWORD=test",
+    "TOKEN_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 })
 class UserRepositoryIT {
     @Container

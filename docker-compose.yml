@@ -32,8 +32,36 @@ services:
       DATABASE_USER: billguard
       DATABASE_PASSWORD: billguard_dev
       LOG_LEVEL: debug
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      PLAID_PRODUCTS: ${PLAID_PRODUCTS:-transactions}
+      PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
+      PLAID_WEBHOOK_URL: ${PLAID_WEBHOOK_URL:-}
+      BILLGUARD_WORKER_ENABLED: "false"
     ports:
       - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    env_file:
+      - ./.env
+    build:
+      context: ./core-api
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      PORT: 3001
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: billguard
+      DATABASE_USER: billguard
+      DATABASE_PASSWORD: billguard_dev
+      LOG_LEVEL: debug
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      PLAID_PRODUCTS: ${PLAID_PRODUCTS:-transactions}
+      PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
+      PLAID_WEBHOOK_URL: ${PLAID_WEBHOOK_URL:-}
+      BILLGUARD_WORKER_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy

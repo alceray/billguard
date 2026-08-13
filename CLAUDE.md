@@ -6,7 +6,7 @@ BillGuard is an AI-powered subscription auditor. It connects to bank accounts th
 
 ## Current phase
 
-Phase 1 is complete on the Java/Python backend split. Phase 2 (Plaid integration) is next. See `PHASES.md`.
+Phase 2 Plaid integration is implemented; real Plaid Sandbox and live-cluster validation remain. Phase 3 subscription detection is next after that validation. See `PHASES.md`.
 
 ## Stack
 
@@ -21,7 +21,7 @@ Phase 1 is complete on the Java/Python backend split. Phase 2 (Plaid integration
 | Orchestration | Kubernetes | kind locally, EKS planned; manifests in `k8s/` |
 | CI | GitHub Actions | Java verify, Python lint/type/test, web app check/build |
 | AI/LLM | OpenAI or Ollama | Phase 1 stub; selected later by `LOCAL_LLM_MODE` |
-| Banking | Plaid | Phase 2 |
+| Banking | Plaid | Link, sync, signed webhooks, and Sandbox fixture implemented in Phase 2 |
 
 ## Project structure
 
@@ -31,13 +31,16 @@ billguard/
 |   |-- src/main/java/dev/billguard/coreapi/
 |   |   |-- auth/             # Controller, service, repository, entity, DTOs
 |   |   |-- common/           # HttpException and compatible error handlers
-|   |   |-- config/           # Security, CORS, rate and request-size filters
-|   |   `-- health/           # /health and database-aware /ready
+|   |   |-- config/           # Security, Plaid client, encryption, worker properties
+|   |   |-- health/           # /health and database-aware /ready
+|   |   |-- jobs/             # Postgres queue, worker, daily enqueue runner
+|   |   `-- plaid/            # Link, exchange, sync, webhooks, accounts, transactions
 |   `-- src/main/resources/db/migration/ # Flyway schema history
 |-- ai-service/
 |   |-- app/                  # FastAPI configuration, errors, logging, routers
 |   `-- tests/                # ASGI contract tests
 |-- web-app/                  # SvelteKit UI and Auth0 SPA client
+|-- fixtures/plaid/           # Deterministic user_custom Sandbox data
 |-- k8s/                      # Deployments, services, config and secret template
 |-- docker-compose.yml
 `-- .github/workflows/ci.yml
@@ -55,6 +58,8 @@ billguard/
 - Flyway is the sole schema owner; Hibernate stays on `ddl-auto: validate`.
 - Preserve idempotency on Plaid writes using the Plaid transaction ID. Webhooks may repeat.
 - Never store Plaid access tokens in plaintext; use the existing encrypted schema column.
+- Advance a Plaid sync cursor in the same transaction as the page it covers.
+- Keep queue enqueue operations in the caller's transaction; workers claim with `SKIP LOCKED`.
 - `/health` and `/ready` stay unauthenticated and outside the API rate limit.
 
 ### AI service
@@ -93,7 +98,11 @@ billguard/
 | `APP_ENV`, `LOCAL_LLM_MODE` | ConfigMap | AI service mode |
 | `OPENAI_API_KEY` | Secret | AI service; Phase 3 |
 | `OLLAMA_BASE_URL` | Environment | AI service local provider URL |
-| `PLAID_CLIENT_ID`, `PLAID_SECRET` | Secret | Phase 2 |
+| `PLAID_CLIENT_ID`, `PLAID_SECRET` | Secret | Plaid API authentication |
+| `PLAID_ENV`, `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES` | ConfigMap/Compose | Plaid Link environment and scope |
+| `PLAID_WEBHOOK_URL` | ConfigMap/Compose | Public signed-webhook endpoint attached to Link tokens |
+| `TOKEN_ENCRYPTION_KEY` | Secret | Base64-encoded 32-byte AES-GCM key for Plaid tokens |
+| `BILLGUARD_WORKER_ENABLED` | Workload override | False for API/CronJob; true only for workers |
 
 Web app environment variables are prefixed with `VITE_` and live in `web-app/.env.local`.
 
@@ -109,6 +118,8 @@ kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/core-api-deployment.yaml
 kubectl apply -f k8s/ai-service-deployment.yaml
+kubectl apply -f k8s/worker-deployment.yaml
+kubectl apply -f k8s/cronjob.yaml
 
 kubectl port-forward -n billguard-dev svc/billguard-core-api-service 3001:80
 ```

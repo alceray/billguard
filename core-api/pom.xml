@@ -30,6 +30,8 @@
 		<java.version>25</java.version>
 		<bucket4j.version>8.19.0</bucket4j.version>
 		<logstash-logback-encoder.version>9.0</logstash-logback-encoder.version>
+		<plaid.version>43.0.0</plaid.version>
+		<wiremock.version>3.13.2</wiremock.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -85,6 +87,11 @@
 			<version>${logstash-logback-encoder.version}</version>
 		</dependency>
 		<dependency>
+			<groupId>com.plaid</groupId>
+			<artifactId>plaid-java</artifactId>
+			<version>${plaid.version}</version>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
@@ -112,6 +119,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.wiremock</groupId>
+			<artifactId>wiremock-standalone</artifactId>
+			<version>${wiremock.version}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

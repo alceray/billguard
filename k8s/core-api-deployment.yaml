@@ -60,6 +60,10 @@ spec:
                 name: billguard-config
             - secretRef:
                 name: billguard-secrets
+          env:
+            # API replicas never poll the queue; only billguard-worker does.
+            - name: BILLGUARD_WORKER_ENABLED
+              value: "false"
           # Initial JVM envelope; tighten after measuring Java 25 RSS and startup.
           resources:
             requests:

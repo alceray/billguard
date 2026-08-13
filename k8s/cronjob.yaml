@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: billguard-daily-sync
+  namespace: billguard-dev
+  labels:
+    app.kubernetes.io/name: billguard-daily-sync
+    app.kubernetes.io/component: scheduler
+spec:
+  # CKAD: CronJob creates a short-lived enqueue Job daily; the worker performs Plaid I/O.
+  schedule: "15 5 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: billguard-daily-sync
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: enqueue
+              image: billguard-core-api:latest
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef:
+                    name: billguard-config
+                - secretRef:
+                    name: billguard-secrets
+              env:
+                - name: SPRING_PROFILES_ACTIVE
+                  value: "job"
+                - name: BILLGUARD_WORKER_ENABLED
+                  value: "false"
+              # The enqueue process is brief and does no Plaid network or transaction ingestion.
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"

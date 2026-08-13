@@ -1,0 +1,10 @@
+spring:
+  config:
+    activate:
+      on-profile: job
+  main:
+    web-application-type: none
+
+billguard:
+  worker:
+    enabled: false

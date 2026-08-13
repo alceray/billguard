@@ -15,6 +15,12 @@ data:
   LOG_LEVEL: "info"
   LOCAL_LLM_MODE: "false"
   AI_SERVICE_URL: "http://billguard-ai-service:8000"
+  PLAID_ENV: "sandbox"
+  PLAID_PRODUCTS: "transactions"
+  PLAID_COUNTRY_CODES: "US"
+  # Replace with the public ingress/tunnel URL for webhook delivery.
+  PLAID_WEBHOOK_URL: "https://REPLACE_ME/api/webhooks/plaid"
+  BILLGUARD_WORKER_ENABLED: "false"
   # Updated per environment — dev points to in-cluster Postgres
   DATABASE_HOST: "postgres-service"
   DATABASE_PORT: "5432"

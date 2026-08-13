@@ -1,7 +1,11 @@
-import { writable, derived, get } from 'svelte/store';
-import { createAuth0Client, type Auth0Client, type User } from '@auth0/auth0-spa-js';
-import { browser } from '$app/environment';
-import { goto } from '$app/navigation';
+import { writable, derived, get } from "svelte/store";
+import {
+  createAuth0Client,
+  type Auth0Client,
+  type User,
+} from "@auth0/auth0-spa-js";
+import { browser } from "$app/environment";
+import { goto } from "$app/navigation";
 
 interface AuthState {
   client: Auth0Client | null;
@@ -9,6 +13,13 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+}
+
+export class AuthSessionError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "AuthSessionError";
+  }
 }
 
 function createAuthStore() {
@@ -28,27 +39,36 @@ function createAuthStore() {
         domain: import.meta.env.VITE_AUTH0_DOMAIN,
         clientId: import.meta.env.VITE_AUTH0_CLIENT_ID,
         authorizationParams: {
-          redirect_uri: window.location.origin + '/callback',
+          redirect_uri: window.location.origin + "/callback",
           audience: import.meta.env.VITE_AUTH0_AUDIENCE,
         },
-        cacheLocation: 'localstorage',
+        cacheLocation: "localstorage",
       });
 
       // Handle redirect callback
-      if (window.location.search.includes('code=') || window.location.search.includes('error=')) {
+      if (
+        window.location.search.includes("code=") ||
+        window.location.search.includes("error=")
+      ) {
         await client.handleRedirectCallback();
-        goto('/dashboard', { replaceState: true });
+        goto("/dashboard", { replaceState: true });
       }
 
       const isAuthenticated = await client.isAuthenticated();
       const user = isAuthenticated ? await client.getUser() : null;
 
-      update((s) => ({ ...s, client, user: user ?? null, isAuthenticated, isLoading: false }));
-
-      // Upsert user in our DB on first auth
+      // Finish provisioning before protected routes mount and query user-owned data.
       if (isAuthenticated && user) {
         await upsertUser(client, user);
       }
+
+      update((s) => ({
+        ...s,
+        client,
+        user: user ?? null,
+        isAuthenticated,
+        isLoading: false,
+      }));
     } catch (err) {
       update((s) => ({
         ...s,
@@ -62,9 +82,9 @@ function createAuthStore() {
     try {
       const token = await client.getTokenSilently();
       await fetch(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ email: user.email, name: user.name }),
@@ -84,16 +104,31 @@ function createAuthStore() {
     await state.client?.logout({
       logoutParams: { returnTo: window.location.origin },
     });
-    set({ client: null, user: null, isAuthenticated: false, isLoading: false, error: null });
+    set({
+      client: null,
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+    });
   }
 
-  async function getToken(): Promise<string | null> {
+  async function getToken(): Promise<string> {
     const state = get({ subscribe });
-    if (!state.client) return null;
+    if (!state.client || !state.isAuthenticated) {
+      throw new AuthSessionError(
+        "Your sign-in session is unavailable. Sign in again.",
+      );
+    }
     try {
       return await state.client.getTokenSilently();
-    } catch {
-      return null;
+    } catch (cause) {
+      throw new AuthSessionError(
+        "Could not refresh your sign-in session. Sign in again.",
+        {
+          cause,
+        },
+      );
     }
   }
 
