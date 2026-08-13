@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: billguard
       POSTGRES_PASSWORD: billguard_dev
     ports:
-      - "5432:5432"
+      # Avoid colliding with PostgreSQL installations running directly on Windows.
+      - "127.0.0.1:54320:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
