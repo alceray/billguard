@@ -2,11 +2,15 @@
 
 ## What this is
 
-BillGuard is an AI-powered subscription auditor. It connects to bank accounts through Plaid, uses an AI classifier to detect recurring charges, and generates cancelation assistance. Ray Lin is building it as a full-stack portfolio project for fintech and infrastructure engineering roles.
+BillGuard is a recurring-charge auditor. It connects to bank accounts through Plaid, detects recurring charges, categorizes them into subscriptions and bills, and generates cancelation assistance. Ray Lin is building it as a full-stack portfolio project for fintech and infrastructure engineering roles.
+
+Two product principles constrain every phase, both chosen because a commercial incumbent structurally cannot offer them: BillGuard is **self-hostable** on the user's own infrastructure with their own Plaid credentials, and it has **no lock-in** - an ICS feed, webhooks, CSV, and a documented REST API all move data out. See `PHASES.md`.
+
+Everything recurring is detected and shown, including rent and loan payments, so the monthly total reflects what the user actually owes. Actionability decides what the UI offers rather than what exists: Subscriptions can be cancelled, Bills can be switched or renegotiated, Fixed charges are tracked only. The only exclusions are income, self-transfers, and credit card payments - the last because the card's own charges are already counted and the payment would double them.
 
 ## Current phase
 
-Phase 2 Plaid integration is implemented; real Plaid Sandbox and live-cluster validation remain. Phase 3 subscription detection is next after that validation. See `PHASES.md`.
+Phase 2 Plaid integration is implemented; real Plaid Sandbox and live-cluster validation remain. Phase 3 recurring-charge detection is next after that validation. It renames the V1 `subscriptions` table to `recurring_charges`. See `PHASES.md`.
 
 ## Stack
 
@@ -18,9 +22,9 @@ Phase 2 Plaid integration is implemented; real Plaid Sandbox and live-cluster va
 | Database | PostgreSQL 16 | Flyway in `core-api` is the only schema owner |
 | Auth | Auth0 | RS256/JWKS with issuer and audience validation |
 | Containers | Docker multi-stage builds | Non-root UID/GID 1001 |
-| Orchestration | Kubernetes | kind locally, EKS planned; manifests in `k8s/` |
+| Orchestration | Kubernetes | kind locally, k3s on one small VPS in production; EKS as a time-boxed exercise. Manifests in `k8s/` |
 | CI | GitHub Actions | Java verify, Python lint/type/test, web app check/build |
-| AI/LLM | OpenAI or Ollama | Phase 1 stub; selected later by `LOCAL_LLM_MODE` |
+| AI/LLM | Ollama, 1-1.5B quantized | Classification only, never generation. Runs on the 4 GiB host; no API key required. OpenAI stays an optional switch via `LOCAL_LLM_MODE` |
 | Banking | Plaid | Link, sync, signed webhooks, and Sandbox fixture implemented in Phase 2 |
 
 ## Project structure
@@ -129,7 +133,8 @@ Flyway runs on core API startup; there is no `kubectl exec psql` migration step.
 ## What not to do
 
 - Do not put domain logic or raw persistence work in controllers.
-- Do not call OpenAI from a core API route; model work crosses the internal AI service boundary.
+- Do not call a model from a core API route; model work crosses the internal AI service boundary.
+- Do not use the model to generate user-facing prose. Letters the user sends under their own name are templates with substitution; the LLM only classifies into constrained outputs.
 - Do not let the Python service own the core schema.
 - Do not skip probes or resource limits in new Kubernetes workloads.
 - Do not add raw HTML or inline styles to Svelte components.

@@ -1,6 +1,6 @@
 # BillGuard
 
-AI-powered subscription auditor. BillGuard connects to a bank through Plaid, detects recurring charges with an AI classifier, and generates cancelation assistance.
+Recurring-charge auditor. BillGuard connects to a bank through Plaid, detects recurring charges, categorizes them into subscriptions and bills, and generates cancelation assistance.
 
 ## Stack
 
@@ -11,7 +11,7 @@ AI-powered subscription auditor. BillGuard connects to a bank through Plaid, det
 | Web app | SvelteKit |
 | Database | PostgreSQL 16 |
 | Auth | Auth0 RS256/JWKS |
-| Runtime | Docker, Kubernetes (kind locally; EKS planned) |
+| Runtime | Docker, Kubernetes (kind locally; k3s in production) |
 
 The browser talks only to the core API on port 3001. The Python service listens internally on port 8000.
 
@@ -49,6 +49,9 @@ Core API: http://localhost:3001
 AI service: http://localhost:8000
 
 Web app: http://localhost:5173
+
+PostgreSQL is exposed to host database tools on `localhost:54320`; services inside
+Compose continue to use `postgres:5432`.
 
 Flyway applies the database schema when `core-api` starts; there is no manual migration step. Compose starts a separate worker from the same core API image. Only that worker polls the Postgres job queue.
 
@@ -136,7 +139,7 @@ Build and load `billguard-core-api:latest` and `billguard-ai-service:latest` int
 | `FRONTEND_URL` | Core API | Allowed CORS origin; defaults to `http://localhost:5173` |
 | `PORT` | Core API | Defaults to `3001` |
 | `SPRING_PROFILES_ACTIVE` | Core API | Use `dev` locally and `prod` in Kubernetes |
-| `LOCAL_LLM_MODE` | AI service | Future switch between Ollama and OpenAI |
+| `LOCAL_LLM_MODE` | AI service | Defaults to Ollama; switches to OpenAI when explicitly disabled |
 | `OLLAMA_BASE_URL` | AI service | Future local model endpoint |
 | `OPENAI_API_KEY` | AI service | Unused until Phase 3 |
 | `AI_SERVICE_URL` | Core API | In-cluster AI service URL for Phase 3 |
