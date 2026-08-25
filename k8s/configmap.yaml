@@ -13,8 +13,12 @@ data:
   APP_ENV: "prod"
   PORT: "3001"
   LOG_LEVEL: "info"
-  LOCAL_LLM_MODE: "false"
+  LOCAL_LLM_MODE: "true"
   AI_SERVICE_URL: "http://billguard-ai-service:8000"
+  OLLAMA_BASE_URL: "http://localhost:11434"
+  OLLAMA_MODEL: "gemma3:1b"
+  # Unload after each batch to return memory on the small single-node cluster.
+  OLLAMA_KEEP_ALIVE: "0"
   PLAID_ENV: "sandbox"
   PLAID_PRODUCTS: "transactions"
   PLAID_COUNTRY_CODES: "US"

@@ -1,6 +1,7 @@
 package dev.billguard.coreapi.plaid;
 
 import java.util.List;
+import java.util.UUID;
 
 import dev.billguard.coreapi.auth.User;
 import dev.billguard.coreapi.auth.UserRepository;
@@ -18,17 +19,20 @@ public class PlaidItemService {
     private final UserRepository userRepository;
     private final PlaidGateway plaidGateway;
     private final TokenCipher tokenCipher;
+    private final PlaidItemRepository itemRepository;
     private final PlaidItemPersistenceService persistenceService;
 
     public PlaidItemService(
         UserRepository userRepository,
         PlaidGateway plaidGateway,
         TokenCipher tokenCipher,
+        PlaidItemRepository itemRepository,
         PlaidItemPersistenceService persistenceService
     ) {
         this.userRepository = userRepository;
         this.plaidGateway = plaidGateway;
         this.tokenCipher = tokenCipher;
+        this.itemRepository = itemRepository;
         this.persistenceService = persistenceService;
     }
 
@@ -46,5 +50,18 @@ public class PlaidItemService {
         } catch (PlaidGatewayException exception) {
             throw PlaidHttpErrors.upstream(exception);
         }
+    }
+
+    public void disconnect(String subject, UUID itemId) {
+        User user = userRepository.findByAuth0Sub(subject)
+            .orElseThrow(() -> new HttpException(HttpStatus.NOT_FOUND, "User not found"));
+        PlaidItem item = itemRepository.findByIdAndUserId(itemId, user.getId())
+            .orElseThrow(() -> new HttpException(HttpStatus.NOT_FOUND, "Bank connection not found"));
+        try {
+            plaidGateway.removeItem(tokenCipher.decrypt(item.getAccessTokenEnc()));
+        } catch (PlaidGatewayException exception) {
+            throw PlaidHttpErrors.upstream(exception);
+        }
+        persistenceService.removeItem(user.getId(), item.getId(), item.getPlaidItemId());
     }
 }

@@ -1,6 +1,7 @@
 package dev.billguard.coreapi.plaid;
 
 import dev.billguard.coreapi.config.TokenCipher;
+import dev.billguard.coreapi.jobs.JobQueueService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,17 +17,20 @@ public class PlaidSyncService {
     private final PlaidGateway plaidGateway;
     private final TokenCipher tokenCipher;
     private final PlaidSyncPageWriter pageWriter;
+    private final JobQueueService jobQueueService;
 
     public PlaidSyncService(
         PlaidItemRepository plaidItemRepository,
         PlaidGateway plaidGateway,
         TokenCipher tokenCipher,
-        PlaidSyncPageWriter pageWriter
+        PlaidSyncPageWriter pageWriter,
+        JobQueueService jobQueueService
     ) {
         this.plaidItemRepository = plaidItemRepository;
         this.plaidGateway = plaidGateway;
         this.tokenCipher = tokenCipher;
         this.pageWriter = pageWriter;
+        this.jobQueueService = jobQueueService;
     }
 
     public void syncItem(String plaidItemId) {
@@ -46,6 +50,7 @@ public class PlaidSyncService {
                     cursor = page.getNextCursor();
                     hasMore = Boolean.TRUE.equals(page.getHasMore());
                 } while (hasMore);
+                jobQueueService.enqueueDetection(item.getUserId());
                 log.info("Plaid item synced itemId={}", plaidItemId);
                 return;
             } catch (PlaidGatewayException exception) {

@@ -12,14 +12,20 @@ import com.plaid.client.model.AccountsGetResponse;
 import com.plaid.client.model.CountryCode;
 import com.plaid.client.model.ItemPublicTokenExchangeRequest;
 import com.plaid.client.model.ItemPublicTokenExchangeResponse;
+import com.plaid.client.model.ItemRemoveRequest;
 import com.plaid.client.model.JWKPublicKey;
 import com.plaid.client.model.LinkTokenCreateRequest;
 import com.plaid.client.model.LinkTokenCreateRequestUser;
 import com.plaid.client.model.LinkTokenCreateResponse;
+import com.plaid.client.model.LinkTokenTransactions;
 import com.plaid.client.model.PlaidError;
+import com.plaid.client.model.PersonalFinanceCategoryVersion;
 import com.plaid.client.model.Products;
 import com.plaid.client.model.TransactionsSyncRequest;
+import com.plaid.client.model.TransactionsSyncRequestOptions;
 import com.plaid.client.model.TransactionsSyncResponse;
+import com.plaid.client.model.TransactionsRecurringGetRequest;
+import com.plaid.client.model.TransactionsRecurringGetResponse;
 import com.plaid.client.model.WebhookVerificationKeyGetRequest;
 import com.plaid.client.model.WebhookVerificationKeyGetResponse;
 import com.plaid.client.request.PlaidApi;
@@ -55,6 +61,7 @@ public class PlaidGateway {
             .language("en")
             .countryCodes(countryCodes)
             .products(products)
+            .transactions(new LinkTokenTransactions().daysRequested(730))
             .user(new LinkTokenCreateRequestUser().clientUserId(userId.toString()));
         if (!properties.webhookUrl().isBlank()) {
             request.webhook(properties.webhookUrl());
@@ -71,14 +78,27 @@ public class PlaidGateway {
         return execute(plaidApi.accountsGet(new AccountsGetRequest().accessToken(accessToken)));
     }
 
+    public void removeItem(String accessToken) {
+        execute(plaidApi.itemRemove(new ItemRemoveRequest().accessToken(accessToken)));
+    }
+
     public TransactionsSyncResponse syncTransactions(String accessToken, String cursor) {
         TransactionsSyncRequest request = new TransactionsSyncRequest()
             .accessToken(accessToken)
-            .count(500);
+            .count(500)
+            .options(new TransactionsSyncRequestOptions()
+                .includePersonalFinanceCategory(true)
+                .personalFinanceCategoryVersion(PersonalFinanceCategoryVersion.V2)
+                .daysRequested(730));
         if (cursor != null && !cursor.isBlank()) {
             request.cursor(cursor);
         }
         return execute(plaidApi.transactionsSync(request));
+    }
+
+    public TransactionsRecurringGetResponse recurringTransactions(String accessToken) {
+        return execute(plaidApi.transactionsRecurringGet(
+            new TransactionsRecurringGetRequest().accessToken(accessToken)));
     }
 
     public JWKPublicKey getWebhookVerificationKey(String keyId) {

@@ -46,4 +46,11 @@ public class PlaidItemPersistenceService {
             .map(AccountResponse::from)
             .toList();
     }
+
+    @Transactional
+    public void removeItem(UUID userId, UUID itemId, String plaidItemId) {
+        jobQueueService.deleteSyncJobs(plaidItemId);
+        dataRepository.deleteItem(userId, itemId);
+        jobQueueService.enqueueDetection(userId);
+    }
 }

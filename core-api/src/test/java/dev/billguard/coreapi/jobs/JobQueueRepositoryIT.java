@@ -59,6 +59,37 @@ class JobQueueRepositoryIT {
     }
 
     @Test
+    void detectionJobsDedupePerUser() {
+        String userId = UUID.randomUUID().toString();
+
+        assertThat(repository.enqueue(JobQueueService.DETECT_STREAMS, userId, "{}" )).isTrue();
+        assertThat(repository.enqueue(JobQueueService.DETECT_STREAMS, userId, "{}" )).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM job_queue WHERE type = 'detect_streams'", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void latestStatusTracksDetectionToCompletionAndAReplacementJob() {
+        String userId = UUID.randomUUID().toString();
+
+        repository.enqueue(JobQueueService.DETECT_STREAMS, userId, "{}");
+        assertThat(repository.latestStatus(JobQueueService.DETECT_STREAMS, userId))
+            .contains("pending");
+
+        JobQueueEntry job = repository.claim(1).getFirst();
+        assertThat(repository.latestStatus(JobQueueService.DETECT_STREAMS, userId))
+            .contains("running");
+
+        repository.markDone(job.id());
+        assertThat(repository.latestStatus(JobQueueService.DETECT_STREAMS, userId))
+            .contains("done");
+
+        repository.enqueue(JobQueueService.DETECT_STREAMS, userId, "{}");
+        assertThat(repository.latestStatus(JobQueueService.DETECT_STREAMS, userId))
+            .contains("pending");
+    }
+
+    @Test
     void concurrentClaimsReturnDisjointJobs() throws Exception {
         for (int index = 0; index < 20; index++) {
             repository.enqueue("sync_item", "item-" + index, "{}");

@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,7 +26,24 @@ public class JobQueueRepository {
             ON CONFLICT (type, dedupe_key)
               WHERE status IN ('pending', 'running')
             DO NOTHING
-            """, type, dedupeKey, payload) == 1;
+        """, type, dedupeKey, payload) == 1;
+    }
+
+    public Optional<String> latestStatus(String type, String dedupeKey) {
+        return jdbcTemplate.query("""
+            SELECT status
+              FROM job_queue
+             WHERE type = ? AND dedupe_key = ?
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1
+            """, (resultSet, rowNumber) -> resultSet.getString("status"), type, dedupeKey)
+            .stream()
+            .findFirst();
+    }
+
+    public void delete(String type, String dedupeKey) {
+        jdbcTemplate.update(
+            "DELETE FROM job_queue WHERE type = ? AND dedupe_key = ?", type, dedupeKey);
     }
 
     @Transactional

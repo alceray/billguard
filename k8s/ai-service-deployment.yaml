@@ -23,8 +23,15 @@ spec:
       labels:
         app: billguard-ai-service
         app.kubernetes.io/name: billguard-ai-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
     spec:
       terminationGracePeriodSeconds: 30
+      volumes:
+        - name: ollama-models
+          emptyDir: {}
       containers:
         - name: ai-service
           image: billguard-ai-service:latest # Replaced by CI with an ECR digest.
@@ -32,13 +39,40 @@ spec:
           ports:
             - name: http
               containerPort: 8000
-          # CKAD: envFrom supplies model mode and future provider credentials.
-          envFrom:
-            - configMapRef:
-                name: billguard-config
-            - secretRef:
-                name: billguard-secrets
-          # Phase 1 is a lightweight stub; Phase 3 will profile model workloads.
+          # The classifier needs model configuration only; it receives no database,
+          # Auth0, Plaid, or token-encryption secrets.
+          env:
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: APP_ENV
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: LOG_LEVEL
+            - name: LOCAL_LLM_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: LOCAL_LLM_MODE
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: OLLAMA_BASE_URL
+            - name: OLLAMA_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: OLLAMA_MODEL
+            - name: OLLAMA_KEEP_ALIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: OLLAMA_KEEP_ALIVE
+          # FastAPI only shapes classifier requests; Ollama owns model memory.
           resources:
             requests:
               cpu: "100m"
@@ -55,7 +89,7 @@ spec:
             periodSeconds: 15
             failureThreshold: 3
             timeoutSeconds: 5
-          # CKAD: readiness will include LLM reachability when inference lands.
+          # Readiness is process-only: Ollama failure intentionally degrades to rules.
           readinessProbe:
             httpGet:
               path: /ready
@@ -64,6 +98,39 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
             timeoutSeconds: 5
+        - name: ollama
+          image: ollama/ollama:0.32.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+          ports:
+            - name: ollama
+              containerPort: 11434
+          volumeMounts:
+            - name: ollama-models
+              mountPath: /root/.ollama
+          lifecycle:
+            postStart:
+              exec:
+                # The server process is already starting when this hook runs.
+                command:
+                  - /bin/sh
+                  - -c
+                  - until OLLAMA_HOST=127.0.0.1:11434 ollama list; do sleep 1; done; OLLAMA_HOST=127.0.0.1:11434 ollama pull gemma3:1b
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"
+          readinessProbe:
+            exec:
+              command: ["ollama", "show", "gemma3:1b"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
 ---
 apiVersion: v1
 kind: Service

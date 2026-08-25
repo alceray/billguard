@@ -1,0 +1,9 @@
+{
+  "prompt_version": "recurring-charge-v2",
+  "evaluated_at": "2026-08-25",
+  "labelled_cases": 5,
+  "rules_fallback_accuracy": 1.0,
+  "ollama_model": "gemma3:1b",
+  "ollama_accuracy": 0.6,
+  "model_degraded": false
+}

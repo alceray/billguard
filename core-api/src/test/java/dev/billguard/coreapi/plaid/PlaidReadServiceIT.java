@@ -2,6 +2,8 @@ package dev.billguard.coreapi.plaid;
 
 import java.util.UUID;
 
+import dev.billguard.coreapi.recurring.RecurringChargeRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,12 @@ class PlaidReadServiceIT {
     @Autowired
     private PlaidReadService readService;
 
+    @Autowired
+    private PlaidDataRepository dataRepository;
+
+    @Autowired
+    private RecurringChargeRepository recurringChargeRepository;
+
     @BeforeEach
     void clean() {
         jdbcTemplate.execute(
@@ -48,12 +56,62 @@ class PlaidReadServiceIT {
         UUID accountB = insertAccount(userB, "item-b", "account-b");
         insertTransaction(accountA, "transaction-a");
         insertTransaction(accountB, "transaction-b");
+        jdbcTemplate.update("""
+            INSERT INTO recurring_charges (
+              user_id, merchant_key, merchant_name, display_name, amount
+            ) VALUES (?, 'test merchant', 'Test Merchant', 'Test Merchant', 12.34)
+            """, userA);
 
         var result = readService.transactions("auth0|user-a", null, 50);
 
         assertThat(result.transactions())
             .extracting(transaction -> transaction.plaidTransactionId())
             .containsExactly("transaction-a");
+        assertThat(result.transactions()).singleElement()
+            .satisfies(transaction -> assertThat(transaction.recurring()).isTrue());
+    }
+
+    @Test
+    void deletingAnItemAlsoDeletesItsAccountsAndTransactions() {
+        UUID userId = insertUser("auth0|user-a", "a@example.com");
+        UUID accountId = insertAccount(userId, "item-a", "account-a");
+        insertTransaction(accountId, "transaction-a");
+        UUID itemId = jdbcTemplate.queryForObject(
+            "SELECT id FROM plaid_items WHERE plaid_item_id = 'item-a'", UUID.class);
+
+        dataRepository.deleteItem(userId, itemId);
+
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM plaid_items WHERE user_id = ?", Integer.class, userId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM accounts WHERE user_id = ?", Integer.class, userId)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM transactions", Integer.class)).isZero();
+    }
+
+    @Test
+    void unmarkingARecurringTransactionUpdatesTheWholeMerchantStream() {
+        UUID userId = insertUser("auth0|user-a", "a@example.com");
+        UUID accountId = insertAccount(userId, "item-a", "account-a");
+        insertTransaction(accountId, "transaction-a");
+        insertTransaction(accountId, "transaction-b");
+        jdbcTemplate.update("""
+            INSERT INTO recurring_charges (
+              user_id, merchant_key, merchant_name, display_name, amount
+            ) VALUES (?, 'test merchant', 'Test Merchant', 'Test Merchant', 12.34)
+            """, userId);
+        UUID transactionId = jdbcTemplate.queryForObject(
+            "SELECT id FROM transactions WHERE plaid_transaction_id = 'transaction-a'", UUID.class);
+
+        boolean updated = recurringChargeRepository.unmarkTransaction(userId, transactionId);
+
+        assertThat(updated).isTrue();
+        assertThat(readService.transactions("auth0|user-a", null, 50).transactions())
+            .allSatisfy(transaction -> assertThat(transaction.recurring()).isFalse());
+        assertThat(jdbcTemplate.queryForObject("""
+            SELECT user_override FROM recurring_charges
+             WHERE user_id = ? AND merchant_key = 'test merchant'
+            """, Boolean.class, userId)).isFalse();
     }
 
     private UUID insertUser(String subject, String email) {

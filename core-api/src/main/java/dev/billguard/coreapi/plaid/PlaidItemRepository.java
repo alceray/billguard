@@ -12,6 +12,8 @@ public interface PlaidItemRepository extends JpaRepository<PlaidItem, UUID> {
 
     Optional<PlaidItem> findByPlaidItemIdAndUserId(String plaidItemId, UUID userId);
 
+    Optional<PlaidItem> findByIdAndUserId(UUID id, UUID userId);
+
     List<PlaidItem> findAllByUserIdOrderByCreatedAtAsc(UUID userId);
 
     @Query("select item.plaidItemId from PlaidItem item")

@@ -10,7 +10,7 @@ Everything recurring is detected and shown, including rent and loan payments, so
 
 ## Current phase
 
-Phase 2 Plaid integration is implemented; real Plaid Sandbox and live-cluster validation remain. Phase 3 recurring-charge detection is next after that validation. It renames the V1 `subscriptions` table to `recurring_charges`. See `PHASES.md`.
+Phase 3 recurring-charge detection is implemented; real Plaid Sandbox and live-cluster validation remain. It persists Plaid PFC data, detects and categorizes streams in queued Java workers, uses an optional local Ollama classifier, and exposes user-correctable recurring-charge API/UI surfaces. See `PHASES.md`.
 
 ## Stack
 
@@ -24,7 +24,7 @@ Phase 2 Plaid integration is implemented; real Plaid Sandbox and live-cluster va
 | Containers | Docker multi-stage builds | Non-root UID/GID 1001 |
 | Orchestration | Kubernetes | kind locally, k3s on one small VPS in production; EKS as a time-boxed exercise. Manifests in `k8s/` |
 | CI | GitHub Actions | Java verify, Python lint/type/test, web app check/build |
-| AI/LLM | Ollama, 1-1.5B quantized | Classification only, never generation. Runs on the 4 GiB host; no API key required. OpenAI stays an optional switch via `LOCAL_LLM_MODE` |
+| AI/LLM | Ollama, 1-1.5B quantized | Classification only, never generation. Runs on the 4 GiB host; no API key required. `LOCAL_LLM_MODE=false` selects deterministic rules; hosted OpenAI support is not implemented |
 | Banking | Plaid | Link, sync, signed webhooks, and Sandbox fixture implemented in Phase 2 |
 
 ## Project structure
@@ -35,14 +35,17 @@ billguard/
 |   |-- src/main/java/dev/billguard/coreapi/
 |   |   |-- auth/             # Controller, service, repository, entity, DTOs
 |   |   |-- common/           # HttpException and compatible error handlers
-|   |   |-- config/           # Security, Plaid client, encryption, worker properties
+|   |   |-- config/           # Security, Plaid/AI clients, encryption, worker properties
+|   |   |-- detection/        # Eligibility, category rules, recurrence arithmetic, AI contract
 |   |   |-- health/           # /health and database-aware /ready
 |   |   |-- jobs/             # Postgres queue, worker, daily enqueue runner
-|   |   `-- plaid/            # Link, exchange, sync, webhooks, accounts, transactions
+|   |   |-- plaid/            # Link, exchange, sync, webhooks, accounts, transactions
+|   |   `-- recurring/        # Auth-scoped unified charges and feedback metrics
 |   `-- src/main/resources/db/migration/ # Flyway schema history
 |-- ai-service/
-|   |-- app/                  # FastAPI configuration, errors, logging, routers
-|   `-- tests/                # ASGI contract tests
+|   |-- app/                  # FastAPI contract, Ollama adapter, fallback rules, metrics
+|   |-- evals/                # Labelled classification cases
+|   `-- tests/                # ASGI contract and degradation tests
 |-- web-app/                  # SvelteKit UI and Auth0 SPA client
 |-- fixtures/plaid/           # Deterministic user_custom Sandbox data
 |-- k8s/                      # Deployments, services, config and secret template
@@ -68,7 +71,7 @@ billguard/
 
 ### AI service
 
-- The service is stateless until Phase 3 and does not own database migrations.
+- The service is stateless and does not own database migrations.
 - Keep browser traffic on the core API. Python endpoints are internal contracts.
 - Convert FastAPI/Pydantic default `detail` errors to the shared error envelope.
 - Run Ruff, mypy, and pytest for every change; keep `uv.lock` committed.
@@ -98,10 +101,10 @@ billguard/
 | `SPRING_PROFILES_ACTIVE` | ConfigMap | Core API logging/runtime profile |
 | `PORT` | ConfigMap | Core API port, default 3001 |
 | `FRONTEND_URL` | Environment | Core API CORS origin |
-| `AI_SERVICE_URL` | ConfigMap | Phase 3 core-to-Python call path |
+| `AI_SERVICE_URL` | ConfigMap | Worker-to-Python classification path |
 | `APP_ENV`, `LOCAL_LLM_MODE` | ConfigMap | AI service mode |
-| `OPENAI_API_KEY` | Secret | AI service; Phase 3 |
-| `OLLAMA_BASE_URL` | Environment | AI service local provider URL |
+| `OPENAI_API_KEY` | Secret | Reserved for a future hosted provider; currently unused |
+| `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_KEEP_ALIVE` | Environment | Local classifier endpoint, pinned model, and unload policy |
 | `PLAID_CLIENT_ID`, `PLAID_SECRET` | Secret | Plaid API authentication |
 | `PLAID_ENV`, `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES` | ConfigMap/Compose | Plaid Link environment and scope |
 | `PLAID_WEBHOOK_URL` | ConfigMap/Compose | Public signed-webhook endpoint attached to Link tokens |

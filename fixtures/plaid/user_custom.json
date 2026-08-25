@@ -23,9 +23,9 @@
         { "date_transacted": "2026-07-14", "date_posted": "2026-07-14", "amount": 8.99, "description": "GITHUB COPILOT", "currency": "USD" },
         { "date_transacted": "2026-07-07", "date_posted": "2026-07-07", "amount": 8.99, "description": "GITHUB COPILOT", "currency": "USD" },
 
-        { "date_transacted": "2026-03-15", "date_posted": "2026-03-16", "amount": 119.88, "description": "ADOBE CREATIVE CLOUD", "currency": "USD" },
-        { "date_transacted": "2025-03-15", "date_posted": "2025-03-16", "amount": 119.88, "description": "ADOBE CREATIVE CLOUD", "currency": "USD" },
-        { "date_transacted": "2024-03-15", "date_posted": "2024-03-16", "amount": 119.88, "description": "ADOBE CREATIVE CLOUD", "currency": "USD" },
+        { "date_transacted": "2026-08-18", "date_posted": "2026-08-18", "amount": 119.88, "description": "ADOBE CREATIVE CLOUD", "currency": "USD" },
+        { "date_transacted": "2025-09-07", "date_posted": "2025-09-07", "amount": 119.88, "description": "ADOBE CREATIVE CLOUD", "currency": "USD" },
+        { "date_transacted": "2024-09-27", "date_posted": "2024-09-27", "amount": 119.88, "description": "ADOBE CREATIVE CLOUD", "currency": "USD" },
 
         { "date_transacted": "2026-07-30", "date_posted": "2026-07-31", "amount": 83.12, "description": "CITY HYDRO UTILITY", "currency": "USD" },
         { "date_transacted": "2026-06-30", "date_posted": "2026-07-01", "amount": 64.73, "description": "CITY HYDRO UTILITY", "currency": "USD" },
@@ -37,7 +37,12 @@
 
         { "date_transacted": "2026-08-04", "date_posted": "2026-08-04", "amount": 5.75, "description": "SQ *BLUE BOTTLE #47", "currency": "USD" },
         { "date_transacted": "2026-07-19", "date_posted": "2026-07-20", "amount": 47.31, "description": "TST*LOCAL MARKET 1842", "currency": "USD" },
-        { "date_transacted": "2026-06-11", "date_posted": "2026-06-12", "amount": 28.5, "description": "BOOKSTORE PURCHASE", "currency": "USD" }
+        { "date_transacted": "2026-06-11", "date_posted": "2026-06-12", "amount": 28.5, "description": "BOOKSTORE PURCHASE", "currency": "USD" },
+
+        { "date_transacted": "2026-08-08", "date_posted": "2026-08-08", "amount": -2750.0, "description": "ACME PAYROLL DIRECT DEP", "currency": "USD" },
+        { "date_transacted": "2026-07-08", "date_posted": "2026-07-08", "amount": -2750.0, "description": "ACME PAYROLL DIRECT DEP", "currency": "USD" },
+        { "date_transacted": "2026-08-06", "date_posted": "2026-08-06", "amount": 825.0, "description": "CREDIT CARD PAYMENT THANK YOU", "currency": "USD" },
+        { "date_transacted": "2026-07-06", "date_posted": "2026-07-06", "amount": 790.0, "description": "CREDIT CARD PAYMENT THANK YOU", "currency": "USD" }
       ]
     }
   ]

@@ -2,6 +2,7 @@ package dev.billguard.coreapi.plaid.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -15,8 +16,10 @@ public record TransactionResponse(
     @JsonProperty("merchant_key") String merchantKey,
     String name,
     LocalDate date,
+    OffsetDateTime datetime,
     boolean pending,
     @JsonProperty("account_name") String accountName,
-    @JsonProperty("institution_name") String institutionName
+    @JsonProperty("institution_name") String institutionName,
+    boolean recurring
 ) {
 }

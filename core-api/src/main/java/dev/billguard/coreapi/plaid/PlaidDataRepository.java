@@ -5,6 +5,7 @@ import java.sql.Array;
 import java.sql.PreparedStatement;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.plaid.client.model.AccountBase;
+import com.plaid.client.model.PersonalFinanceCategory;
 import com.plaid.client.model.RemovedTransaction;
 import com.plaid.client.model.Transaction;
 import dev.billguard.coreapi.common.HttpException;
@@ -83,14 +85,17 @@ public class PlaidDataRepository {
     public void applyTransaction(String plaidItemId, Transaction transaction) {
         String merchantKey = merchantKeyNormalizer.normalize(transaction.getMerchantName(), transaction.getName());
         List<String> category = transaction.getCategory();
+        PersonalFinanceCategory pfc = transaction.getPersonalFinanceCategory();
+        OffsetDateTime transactionDatetime = transactionDatetime(transaction);
         String rawPayload = rawPayload(transaction, merchantKey);
         int changed = jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO transactions (
                   account_id, plaid_transaction_id, amount, currency, merchant_name, name, date,
-                  pending, category, raw_payload, pending_transaction_id, merchant_key
+                  transaction_datetime, pending, category, raw_payload, pending_transaction_id, merchant_key,
+                  pfc_primary, pfc_detailed
                 )
-                SELECT account.id, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?
+                SELECT account.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, ?
                   FROM accounts account
                  WHERE account.plaid_account_id = ? AND account.plaid_item_id = ?
                 ON CONFLICT (plaid_transaction_id) DO UPDATE
@@ -100,11 +105,14 @@ public class PlaidDataRepository {
                        merchant_name = EXCLUDED.merchant_name,
                        name = EXCLUDED.name,
                        date = EXCLUDED.date,
+                       transaction_datetime = EXCLUDED.transaction_datetime,
                        pending = EXCLUDED.pending,
                        category = EXCLUDED.category,
                        raw_payload = EXCLUDED.raw_payload,
                        pending_transaction_id = EXCLUDED.pending_transaction_id,
                        merchant_key = EXCLUDED.merchant_key,
+                       pfc_primary = EXCLUDED.pfc_primary,
+                       pfc_detailed = EXCLUDED.pfc_detailed,
                        updated_at = NOW()
                 """);
             statement.setString(1, transaction.getTransactionId());
@@ -113,18 +121,25 @@ public class PlaidDataRepository {
             statement.setString(4, transaction.getMerchantName());
             statement.setString(5, transaction.getName());
             statement.setObject(6, transaction.getDate());
-            statement.setBoolean(7, Boolean.TRUE.equals(transaction.getPending()));
+            if (transactionDatetime == null) {
+                statement.setNull(7, Types.TIMESTAMP_WITH_TIMEZONE);
+            } else {
+                statement.setObject(7, transactionDatetime);
+            }
+            statement.setBoolean(8, Boolean.TRUE.equals(transaction.getPending()));
             if (category == null) {
-                statement.setNull(8, Types.ARRAY);
+                statement.setNull(9, Types.ARRAY);
             } else {
                 Array sqlArray = connection.createArrayOf("text", category.toArray(String[]::new));
-                statement.setArray(8, sqlArray);
+                statement.setArray(9, sqlArray);
             }
-            statement.setString(9, rawPayload);
-            statement.setString(10, transaction.getPendingTransactionId());
-            statement.setString(11, merchantKey);
-            statement.setString(12, transaction.getAccountId());
-            statement.setString(13, plaidItemId);
+            statement.setString(10, rawPayload);
+            statement.setString(11, transaction.getPendingTransactionId());
+            statement.setString(12, merchantKey);
+            statement.setString(13, pfc == null ? null : pfc.getPrimary());
+            statement.setString(14, pfc == null ? null : pfc.getDetailed());
+            statement.setString(15, transaction.getAccountId());
+            statement.setString(16, plaidItemId);
             return statement;
         });
         if (changed != 1) {
@@ -163,6 +178,11 @@ public class PlaidDataRepository {
             """, status, truncate(error), plaidItemId);
     }
 
+    public void deleteItem(UUID userId, UUID itemId) {
+        jdbcTemplate.update(
+            "DELETE FROM plaid_items WHERE id = ? AND user_id = ?", itemId, userId);
+    }
+
     public boolean recordWebhook(
         String eventId,
         String webhookType,
@@ -197,11 +217,16 @@ public class PlaidDataRepository {
         return jdbcTemplate.query("""
             SELECT transaction.id, transaction.plaid_transaction_id, transaction.amount,
                    transaction.currency, transaction.merchant_name, transaction.merchant_key,
-                   transaction.name, transaction.date, transaction.pending,
-                   account.name AS account_name, item.institution_name
+                   transaction.name, transaction.date, transaction.transaction_datetime, transaction.pending,
+                   account.name AS account_name, item.institution_name,
+                   recurring.id IS NOT NULL AS recurring
               FROM transactions transaction
               JOIN accounts account ON account.id = transaction.account_id
               JOIN plaid_items item ON item.plaid_item_id = account.plaid_item_id
+              LEFT JOIN recurring_charges recurring
+                ON recurring.user_id = account.user_id
+               AND recurring.merchant_key = transaction.merchant_key
+               AND recurring.user_override IS DISTINCT FROM FALSE
              WHERE account.user_id = ?
             """ + cursorPredicate + """
              ORDER BY transaction.date DESC, transaction.id DESC
@@ -215,9 +240,11 @@ public class PlaidDataRepository {
                 resultSet.getString("merchant_key"),
                 resultSet.getString("name"),
                 resultSet.getObject("date", LocalDate.class),
+                resultSet.getObject("transaction_datetime", OffsetDateTime.class),
                 resultSet.getBoolean("pending"),
                 resultSet.getString("account_name"),
-                resultSet.getString("institution_name")
+                resultSet.getString("institution_name"),
+                resultSet.getBoolean("recurring")
             ), parameters.toArray());
     }
 
@@ -231,9 +258,17 @@ public class PlaidDataRepository {
         payload.put("merchant_name", transaction.getMerchantName());
         payload.put("name", transaction.getName());
         payload.put("date", transaction.getDate());
+        payload.put("datetime", transaction.getDatetime());
+        payload.put("authorized_datetime", transaction.getAuthorizedDatetime());
         payload.put("pending", transaction.getPending());
         payload.put("pending_transaction_id", transaction.getPendingTransactionId());
         payload.put("category", transaction.getCategory());
+        if (transaction.getPersonalFinanceCategory() != null) {
+            Map<String, Object> pfc = new LinkedHashMap<>();
+            pfc.put("primary", transaction.getPersonalFinanceCategory().getPrimary());
+            pfc.put("detailed", transaction.getPersonalFinanceCategory().getDetailed());
+            payload.put("personal_finance_category", pfc);
+        }
         payload.put("merchant_key", merchantKey);
         try {
             return objectMapper.writeValueAsString(payload);
@@ -250,6 +285,12 @@ public class PlaidDataRepository {
             return transaction.getUnofficialCurrencyCode();
         }
         return "USD";
+    }
+
+    private OffsetDateTime transactionDatetime(Transaction transaction) {
+        return transaction.getAuthorizedDatetime() == null
+            ? transaction.getDatetime()
+            : transaction.getAuthorizedDatetime();
     }
 
     private String blankToNull(String value) {

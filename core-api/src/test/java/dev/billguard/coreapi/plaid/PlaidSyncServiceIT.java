@@ -1,6 +1,7 @@
 package dev.billguard.coreapi.plaid;
 
 import java.util.UUID;
+import java.time.OffsetDateTime;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import dev.billguard.coreapi.config.TokenCipher;
@@ -89,10 +90,22 @@ class PlaidSyncServiceIT {
         syncService.syncItem(ITEM_ID);
 
         assertThat(countTransactions()).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM job_queue WHERE type = 'detect_streams'", Integer.class)).isEqualTo(1);
         assertThat(cursor()).isEqualTo("cursor-2");
         assertThat(jdbcTemplate.queryForObject(
             "SELECT merchant_key FROM transactions WHERE plaid_transaction_id = 'tx-blue-bottle'",
             String.class)).isEqualTo("blue bottle");
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT pfc_detailed FROM transactions WHERE plaid_transaction_id = 'tx-blue-bottle'",
+            String.class)).isEqualTo("FOOD_AND_DRINK_COFFEE");
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT transaction_datetime FROM transactions WHERE plaid_transaction_id = 'tx-blue-bottle'",
+            OffsetDateTime.class)).isEqualTo(OffsetDateTime.parse("2026-08-01T14:45:00Z"));
+        assertThat(jdbcTemplate.queryForObject("""
+            SELECT raw_payload -> 'personal_finance_category' ->> 'primary'
+              FROM transactions WHERE plaid_transaction_id = 'tx-blue-bottle'
+            """, String.class)).isEqualTo("FOOD_AND_DRINK");
 
         jdbcTemplate.update("UPDATE plaid_items SET cursor = NULL WHERE plaid_item_id = ?", ITEM_ID);
         syncService.syncItem(ITEM_ID);
@@ -156,7 +169,14 @@ class PlaidSyncServiceIT {
               "amount":15.49,
               "iso_currency_code":"USD",
               "category":["Shops"],
+              "personal_finance_category":{
+                "primary":"FOOD_AND_DRINK",
+                "detailed":"FOOD_AND_DRINK_COFFEE",
+                "confidence_level":"VERY_HIGH"
+              },
               "date":"2026-08-01",
+              "authorized_datetime":"2026-08-01T14:45:00Z",
+              "datetime":"2026-08-01T15:30:00Z",
               "name":"%s",
               "merchant_name":"%s",
               "pending":false,

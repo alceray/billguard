@@ -3,6 +3,7 @@ package dev.billguard.coreapi.jobs;
 import java.time.Duration;
 
 import dev.billguard.coreapi.config.WorkerProperties;
+import dev.billguard.coreapi.detection.RecurringChargeDetectionService;
 import dev.billguard.coreapi.plaid.PlaidSyncService;
 
 import org.slf4j.Logger;
@@ -19,15 +20,18 @@ public class JobWorker {
 
     private final JobQueueRepository repository;
     private final PlaidSyncService plaidSyncService;
+    private final RecurringChargeDetectionService detectionService;
     private final WorkerProperties properties;
 
     public JobWorker(
         JobQueueRepository repository,
         PlaidSyncService plaidSyncService,
+        RecurringChargeDetectionService detectionService,
         WorkerProperties properties
     ) {
         this.repository = repository;
         this.plaidSyncService = plaidSyncService;
+        this.detectionService = detectionService;
         this.properties = properties;
     }
 
@@ -50,6 +54,8 @@ public class JobWorker {
         try {
             switch (job.type()) {
                 case JobQueueService.SYNC_ITEM -> plaidSyncService.syncItem(job.dedupeKey());
+                case JobQueueService.DETECT_STREAMS -> detectionService.detectUser(
+                    java.util.UUID.fromString(job.dedupeKey()));
                 default -> throw new IllegalArgumentException("Unsupported job type: " + job.type());
             }
             repository.markDone(job.id());

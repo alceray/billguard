@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { isAuthenticated } from '$stores/auth';
-  import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
-  import { auth } from '$stores/auth';
+  import { isAuthenticated } from "$stores/auth";
+  import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
+  import { auth } from "$stores/auth";
 
   onMount(() => {
-    if ($isAuthenticated) goto('/dashboard');
+    if ($isAuthenticated) goto("/dashboard");
   });
 </script>
 
@@ -25,11 +25,13 @@
     </p>
 
     <button class="cta" on:click={() => auth.login()}>
-      Connect your bank
+      Sign in / Sign up
       <span class="arrow">→</span>
     </button>
 
-    <p class="disclaimer">Read-only access · No credentials stored · Self-hostable</p>
+    <p class="disclaimer">
+      Read-only access · No bank credentials stored · Self-hostable
+    </p>
   </div>
 
   <div class="grid-bg" aria-hidden="true"></div>
@@ -110,14 +112,23 @@
     border-radius: var(--radius);
     padding: 14px 28px;
     cursor: pointer;
-    transition: opacity 0.15s, transform 0.15s;
+    transition:
+      opacity 0.15s,
+      transform 0.15s;
     margin-bottom: 20px;
   }
 
-  .cta:hover { opacity: 0.9; transform: translateY(-1px); }
-  .cta:active { transform: translateY(0); }
+  .cta:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+  .cta:active {
+    transform: translateY(0);
+  }
 
-  .arrow { font-size: 18px; }
+  .arrow {
+    font-size: 18px;
+  }
 
   .disclaimer {
     font-size: 12px;

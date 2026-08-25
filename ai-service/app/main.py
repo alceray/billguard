@@ -12,4 +12,3 @@ app = FastAPI(title="BillGuard AI Service", version="0.1.0", docs_url=None, redo
 install_exception_handlers(app)
 app.include_router(health.router)
 app.include_router(classify.router)
-

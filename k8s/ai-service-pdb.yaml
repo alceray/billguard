@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: billguard-ai-service
+  namespace: billguard-dev
+  labels:
+    app.kubernetes.io/name: billguard-ai-service
+    app.kubernetes.io/component: ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: billguard-ai-service

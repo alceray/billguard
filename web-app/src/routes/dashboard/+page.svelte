@@ -3,6 +3,7 @@
   import DashboardShell from "$lib/components/DashboardShell.svelte";
   import ConnectBankButton from "$lib/components/ConnectBankButton.svelte";
   import { api } from "$lib/api";
+  import { notify } from "$stores/notifications";
 
   interface Account {
     id: string;
@@ -13,6 +14,7 @@
     mask: string | null;
   }
   interface PlaidItem {
+    id: string;
     item_id: string;
     institution_name: string | null;
     status: string;
@@ -24,20 +26,16 @@
   let items: PlaidItem[] = [];
   let loading = true;
   let syncing = false;
-  let error = "";
+  let disconnectingId: string | null = null;
 
   onMount(loadItems);
 
   async function loadItems() {
     loading = true;
-    error = "";
     try {
       items = await api.get<PlaidItem[]>("/api/plaid/items");
     } catch (value) {
-      error =
-        value instanceof Error
-          ? value.message
-          : "Could not load connected accounts.";
+      notify.error(message(value, "Could not load connected accounts."));
     } finally {
       loading = false;
     }
@@ -45,19 +43,41 @@
 
   async function syncNow() {
     syncing = true;
-    error = "";
     try {
       await api.post("/api/plaid/sync", {});
+      notify.success("Bank sync is running in the background.");
     } catch (value) {
-      error =
-        value instanceof Error ? value.message : "Could not schedule a sync.";
+      notify.error(message(value, "Could not start a bank sync."));
     } finally {
       syncing = false;
     }
   }
 
+  async function disconnect(item: PlaidItem) {
+    const institution = item.institution_name ?? "this institution";
+    const confirmed = window.confirm(
+      `Disconnect ${institution}? BillGuard will revoke access and delete its accounts and transactions.`,
+    );
+    if (!confirmed) return;
+
+    disconnectingId = item.id;
+    try {
+      await api.del<void>(`/api/plaid/items/${encodeURIComponent(item.id)}`);
+      items = items.filter((connectedItem) => connectedItem.id !== item.id);
+      notify.success(`${institution} was disconnected.`);
+    } catch (value) {
+      notify.error(message(value, "Could not disconnect the bank."));
+    } finally {
+      disconnectingId = null;
+    }
+  }
+
   function formatTime(value: string | null): string {
     return value ? new Date(value).toLocaleString() : "Waiting for first sync";
+  }
+
+  function message(value: unknown, fallback: string): string {
+    return value instanceof Error ? value.message : fallback;
   }
 </script>
 
@@ -70,7 +90,6 @@
     <ConnectBankButton on:connected={loadItems} />
   </header>
 
-  {#if error}<div class="error" role="alert">{error}</div>{/if}
   {#if loading}
     <div class="state">Loading connected accounts…</div>
   {:else if items.length === 0}
@@ -108,9 +127,22 @@
               <h3>{item.institution_name ?? "Connected institution"}</h3>
               <p>Last synced: {formatTime(item.last_synced_at)}</p>
             </div>
-            <span class:error-status={item.status !== "healthy"} class="status"
-              >{item.status.replaceAll("_", " ")}</span
-            >
+            <div class="item-actions">
+              <span
+                class:error-status={item.status !== "healthy"}
+                class="status">{item.status.replaceAll("_", " ")}</span
+              >
+              <button
+                class="disconnect"
+                type="button"
+                disabled={disconnectingId === item.id}
+                on:click={() => disconnect(item)}
+              >
+                {disconnectingId === item.id
+                  ? "Disconnecting..."
+                  : "Disconnect"}
+              </button>
+            </div>
           </div>
           {#if item.last_error}<p class="item-error">{item.last_error}</p>{/if}
           <div class="accounts">
@@ -165,8 +197,7 @@
   }
   .state,
   .empty-state,
-  .item-card,
-  .error {
+  .item-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -174,11 +205,6 @@
   .state {
     color: var(--text-muted);
     padding: 36px;
-  }
-  .error {
-    color: var(--danger);
-    margin-bottom: 20px;
-    padding: 12px 16px;
   }
   .empty-state {
     padding: 64px 40px;
@@ -232,6 +258,27 @@
   .status.error-status {
     background: var(--surface-2);
     color: var(--danger);
+  }
+  .item-actions {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+  }
+  .disconnect {
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+    border-radius: 7px;
+    color: var(--danger);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    padding: 6px 10px;
+  }
+  .disconnect:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+  .disconnect:disabled {
+    cursor: wait;
+    opacity: 0.6;
   }
   .item-error {
     color: var(--danger);

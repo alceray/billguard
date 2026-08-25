@@ -55,7 +55,7 @@ public class PlaidReadService {
                 Collectors.mapping(AccountResponse::from, Collectors.toList())));
         return itemRepository.findAllByUserIdOrderByCreatedAtAsc(user.getId()).stream()
             .map(item -> new PlaidItemResponse(
-                item.getPlaidItemId(), item.getInstitutionId(), item.getInstitutionName(),
+                item.getId(), item.getPlaidItemId(), item.getInstitutionId(), item.getInstitutionName(),
                 item.getStatus(), item.getLastError(), item.getLastSyncedAt(),
                 accounts.getOrDefault(item.getPlaidItemId(), List.of())))
             .toList();

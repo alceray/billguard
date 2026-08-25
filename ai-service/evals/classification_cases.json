@@ -1,0 +1,7 @@
+[
+  {"merchant": "NETFLIX.COM", "pfc": "ENTERTAINMENT_TV_AND_MOVIES", "category": "streaming"},
+  {"merchant": "SPOTIFY", "pfc": "ENTERTAINMENT_MUSIC_AND_AUDIO", "category": "streaming"},
+  {"merchant": "CITY ELECTRIC", "pfc": "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY", "category": "utilities"},
+  {"merchant": "LANDLORD RENT", "pfc": "RENT_AND_UTILITIES_RENT", "category": "housing"},
+  {"merchant": "RANDOM STORE", "pfc": "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE", "category": "other"}
+]

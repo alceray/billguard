@@ -2,6 +2,7 @@
   import { createEventDispatcher } from "svelte";
   import { api, ApiError } from "$lib/api";
   import { loadPlaidLink } from "$lib/plaid";
+  import { notify } from "$stores/notifications";
 
   interface LinkTokenResponse {
     link_token: string;
@@ -9,11 +10,9 @@
 
   const dispatch = createEventDispatcher<{ connected: void }>();
   let loading = false;
-  let error = "";
 
   async function connect() {
     loading = true;
-    error = "";
     try {
       const [plaid, token] = await Promise.all([
         loadPlaidLink(),
@@ -29,24 +28,29 @@
               institution_name: metadata.institution?.name ?? null,
             });
             dispatch("connected");
+            notify.success(
+              `${metadata.institution?.name ?? "Bank account"} connected.`,
+            );
           } catch (exchangeError) {
-            error = message(exchangeError);
+            notify.error(message(exchangeError));
           } finally {
             loading = false;
             handler.destroy();
           }
         },
         onExit: (exitError) => {
-          if (exitError)
-            error =
-              exitError.display_message ?? "Bank connection was not completed.";
+          if (exitError) {
+            notify.error(
+              exitError.display_message ?? "Bank connection was not completed.",
+            );
+          }
           loading = false;
           handler.destroy();
         },
       });
       handler.open();
     } catch (connectError) {
-      error = message(connectError);
+      notify.error(message(connectError));
       loading = false;
     }
   }
@@ -61,7 +65,6 @@
 <button class="connect-btn" type="button" disabled={loading} on:click={connect}>
   {loading ? "Opening Plaid…" : "Connect bank account"}
 </button>
-{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 <style>
   .connect-btn {
@@ -78,10 +81,5 @@
   .connect-btn:disabled {
     cursor: wait;
     opacity: 0.65;
-  }
-  .error {
-    color: var(--danger);
-    font-size: 13px;
-    margin-top: 10px;
   }
 </style>

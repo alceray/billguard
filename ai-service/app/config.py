@@ -9,12 +9,14 @@ class Settings(BaseSettings):
 
     app_env: str = "dev"
     log_level: str = "INFO"
-    local_llm_mode: bool = False
+    local_llm_mode: bool = True
     openai_api_key: SecretStr | None = None
     ollama_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:11434")
+    ollama_model: str = "gemma3:1b"
+    ollama_keep_alive: str = "0"
+    ollama_timeout_seconds: float = 25.0
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

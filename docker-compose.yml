@@ -6,22 +6,20 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: billguard
-      POSTGRES_USER: billguard
-      POSTGRES_PASSWORD: billguard_dev
+      POSTGRES_USER: ${DATABASE_USER:-billguard}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-billguard_dev}
     ports:
       # Avoid colliding with PostgreSQL installations running directly on Windows.
       - "127.0.0.1:54320:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U billguard -d billguard"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   core-api:
-    env_file:
-      - ./.env
     build:
       context: ./core-api
     environment:
@@ -30,14 +28,20 @@ services:
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_NAME: billguard
-      DATABASE_USER: billguard
-      DATABASE_PASSWORD: billguard_dev
+      DATABASE_USER: ${DATABASE_USER:-billguard}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-billguard_dev}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID}
+      PLAID_SECRET: ${PLAID_SECRET}
       LOG_LEVEL: debug
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       PLAID_PRODUCTS: ${PLAID_PRODUCTS:-transactions}
       PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
       PLAID_WEBHOOK_URL: ${PLAID_WEBHOOK_URL:-}
       BILLGUARD_WORKER_ENABLED: "false"
+      AI_SERVICE_URL: http://ai-service:8000
     ports:
       - "3001:3001"
     depends_on:
@@ -45,8 +49,6 @@ services:
         condition: service_healthy
 
   worker:
-    env_file:
-      - ./.env
     build:
       context: ./core-api
     environment:
@@ -55,31 +57,65 @@ services:
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_NAME: billguard
-      DATABASE_USER: billguard
-      DATABASE_PASSWORD: billguard_dev
+      DATABASE_USER: ${DATABASE_USER:-billguard}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-billguard_dev}
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID}
+      PLAID_SECRET: ${PLAID_SECRET}
       LOG_LEVEL: debug
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       PLAID_PRODUCTS: ${PLAID_PRODUCTS:-transactions}
       PLAID_COUNTRY_CODES: ${PLAID_COUNTRY_CODES:-US}
       PLAID_WEBHOOK_URL: ${PLAID_WEBHOOK_URL:-}
       BILLGUARD_WORKER_ENABLED: "true"
+      AI_SERVICE_URL: http://ai-service:8000
     depends_on:
       postgres:
         condition: service_healthy
 
   ai-service:
-    env_file:
-      - ./.env
     build:
       context: ./ai-service
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      APP_ENV: dev
+      APP_ENV: ${APP_ENV:-dev}
       LOG_LEVEL: debug
+      LOCAL_LLM_MODE: ${LOCAL_LLM_MODE:-true}
+      # Compose containers must use the service DNS name, not the host's localhost.
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:1b}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
     ports:
       - "8000:8000"
     volumes:
       - ./ai-service/app:/app/app:ro
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+
+  ollama:
+    image: ollama/ollama:0.32.0
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ollama-pull:
+    image: ollama/ollama:0.32.0
+    command: pull ${OLLAMA_MODEL:-gemma3:1b}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  ollama_data:

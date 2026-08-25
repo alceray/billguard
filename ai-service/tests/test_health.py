@@ -11,10 +11,12 @@ async def test_health_and_readiness() -> None:
     ) as client:
         health = await client.get("/health")
         ready = await client.get("/ready")
+        metrics = await client.get("/metrics")
 
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
     assert "timestamp" in health.json()
     assert ready.status_code == 200
     assert ready.json() == {"status": "ready"}
-
+    assert metrics.status_code == 200
+    assert "billguard_ai_classification_requests_total" in metrics.text

@@ -10,9 +10,7 @@ logger = structlog.get_logger(__name__)
 
 def install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
-    async def validation_error(
-        _request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
         details: list[dict[str, Any]] = []
         for error in exc.errors():
             details.append(

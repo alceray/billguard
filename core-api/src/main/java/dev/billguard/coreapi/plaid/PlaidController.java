@@ -1,6 +1,7 @@
 package dev.billguard.coreapi.plaid;
 
 import java.util.List;
+import java.util.UUID;
 
 import dev.billguard.coreapi.plaid.dto.ExchangeRequest;
 import dev.billguard.coreapi.plaid.dto.ExchangeResponse;
@@ -12,7 +13,9 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -58,5 +61,14 @@ public class PlaidController {
     @GetMapping("/items")
     List<PlaidItemResponse> items(@AuthenticationPrincipal Jwt jwt) {
         return readService.items(jwt.getSubject());
+    }
+
+    @DeleteMapping("/items/{itemId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void disconnect(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable UUID itemId
+    ) {
+        itemService.disconnect(jwt.getSubject(), itemId);
     }
 }

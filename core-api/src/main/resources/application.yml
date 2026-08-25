@@ -70,3 +70,6 @@ billguard:
     poll-delay: ${BILLGUARD_WORKER_POLL_DELAY:2000}
     batch-size: ${BILLGUARD_WORKER_BATCH_SIZE:10}
     stale-after: ${BILLGUARD_WORKER_STALE_AFTER:PT10M}
+  ai:
+    service-url: ${AI_SERVICE_URL:http://localhost:8000}
+    timeout: ${AI_SERVICE_TIMEOUT:30s}

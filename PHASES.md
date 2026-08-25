@@ -131,7 +131,7 @@ Automated verification and manifest dry-runs are complete. A real `user_custom` 
 
 CronJob, and a multi-service internal mesh across the API, worker, and AI service.
 
-## Phase 3 - Recurring Charge Detection (Planned)
+## Phase 3 - Recurring Charge Detection (Implemented; Sandbox validation pending)
 
 **Goal:** turn ingested transactions into a categorized list of the user's recurring charges, with confidence exposed and user correction possible.
 
@@ -192,7 +192,7 @@ Rename the V1 indexes to match (`idx_subscriptions_user_id`, `idx_subscriptions_
 | `amount` (V1) | | Most recent charge amount |
 | `previous_amount`, `amount_changed_at` | | Feeds the Phase 4 price-increase alert and a "was $12.99" badge |
 | `is_variable_amount` | | Derived from amount coefficient of variation |
-| `billing_cycle` (V1) | `weekly` \| `monthly` \| `quarterly` \| `annual` | Computed deterministically, never by the model |
+| `billing_cycle` (V1) | `weekly` \| `biweekly` \| `semi_monthly` \| `monthly` \| `quarterly` \| `annual` | Computed deterministically, never by the model |
 | `next_charge_date` (V1) | | `last_charge + median_gap`. A projection, not a fact |
 | `confidence_score` (V1) | 0.00-1.00 | Deterministic formula over interval regularity, amount stability, and charge count |
 
@@ -215,18 +215,20 @@ shopping_membership | education | finance | housing | loan | other
 
 ### Build
 
-- [ ] V3 migration above
-- [ ] Deterministic recurrence detector over `merchant_key` groups: median gap, median absolute deviation, amount coefficient of variation, cycle bucketing with tolerance bands (7±2 weekly, 14±3 biweekly, 30±5 monthly, 91±10 quarterly, 365±20 annual)
-- [ ] `detect_streams` job type deduped on `user_id`, dispatched by the existing worker
-- [ ] Override guard on the detector upsert (`user_override IS NULL`, `category_source <> 'user'`), with an integration test asserting an overridden row survives a pass
-- [ ] Category assignment in order: Plaid PFC rule mapping, then the model for whatever it cannot resolve, with a user pick overriding both
-- [ ] Reshape `/internal/classify` to streams and singletons; update its tests
-- [ ] Replace the classifier stub with an Ollama implementation, defaulting to a 1-1.5B quantized model
-- [ ] Version and evaluate the classification prompt and structured output
-- [ ] Recurring charges UI: Subscriptions, Bills, and Fixed groups with subtotals, confirmed and possible sections, mark/unmark actions, category filter
-- [ ] Accuracy dashboard and false-positive tracking, benchmarked against Plaid `/transactions/recurring/get` as ground truth
-- [ ] Prometheus metrics for the AI service
-- [ ] HPA for the worker and a PodDisruptionBudget for the AI service
+- [x] V3 migration above
+- [x] Deterministic recurrence detector over `merchant_key` groups: median gap, median absolute deviation, amount coefficient of variation, cycle bucketing with tolerance bands (7±2 weekly, 14±3 biweekly, 30±5 monthly, 91±10 quarterly, 365±20 annual)
+- [x] `detect_streams` job type deduped on `user_id`, dispatched by the existing worker
+- [x] Override guard on the detector upsert (`user_override IS NULL`, `category_source <> 'user'`), with integration coverage
+- [x] Category assignment in order: Plaid PFC rule mapping, then the model for whatever it cannot resolve, with a user pick overriding both
+- [x] Reshape `/internal/classify` to streams and singletons; update its tests
+- [x] Replace the classifier stub with an Ollama implementation, defaulting to quantized `gemma3:1b`
+- [x] Version and evaluate the classification prompt and structured output; the v2 batch contract returned all labelled keys, with 100% rules accuracy and 60% `gemma3:1b` category accuracy recorded in `ai-service/evals/results.json`
+- [x] Recurring charges UI: one continuous confirmed/possible list with group and category tags, group/category filtering, confirmed-only total, and mark/unmark actions
+- [x] Accuracy dashboard and false-positive tracking, with an authenticated Plaid `/transactions/recurring/get` benchmark
+- [x] Prometheus metrics for the AI service
+- [x] HPA for the worker and a PodDisruptionBudget for the AI service
+
+The HPA and PDB manifests are EKS/CKAD exercise artifacts. Do not apply them to the single-node k3s host: Metrics Server and spare schedulable capacity are not guaranteed there, and a one-replica `minAvailable: 1` PDB can block node maintenance.
 
 ### Design notes
 
@@ -366,10 +368,11 @@ The standing instance runs **k3s on a single Hetzner CX23** (2 vCPU / 4 GiB, x86
 |---|---|
 | core-api with `BILLGUARD_WORKER_ENABLED=true` | ~250 MiB (measured idle: 241.9 MiB) |
 | ai-service | ~100 MiB |
+| Ollama `gemma3:1b` | Transient; 815 MB model artifact, ~980 MiB measured loaded RSS |
 | web-app | ~100 MiB |
 | Postgres, in-cluster | ~150 MiB |
 | k3s itself | ~500 MiB |
-| **Total** | **~1.1 GiB of 4 GiB** |
+| **Baseline excluding loaded model** | **~1.1 GiB of 4 GiB** |
 
 **Collapsing the worker into the API pod is the whole trick** and it is already a config flag. One user's demo has no reason to run a second JVM. `k8s/worker-deployment.yaml` stays in the repo as the separated-workload demonstration and simply is not scheduled here.
 
@@ -479,7 +482,7 @@ This also keeps the model's entire job inside one shape: classification into con
 
 **Secrets come from an interface, not from AWS.** External Secrets Operator backed by Secrets Manager is one implementation; a `.env` file is another. Wiring the application directly to AWS would make Phase 6 impossible, since a self-hoster has no Secrets Manager. Keeping the seam means the AWS deployment is one consumer of a config surface rather than a hard dependency - the self-hosting constraint improving the AWS work rather than competing with it.
 
-**Sizing.** 4 GiB fits the stack with roughly 3 GiB spare, but only because the worker is collapsed into the API. Running both JVMs separately adds about 250 MiB and is the first thing to change if the demo ever needs to show queue concurrency for real. The earlier concern that a single 2 vCPU / 4 GiB box would be too tight assumed two JVMs plus a separate broker; the Postgres job queue removed the broker and the worker flag removes the second JVM.
+**Sizing.** The non-model baseline uses roughly 1.1 GiB, and `OLLAMA_KEEP_ALIVE=0` unloads `gemma3:1b` after each queued batch. Under Docker Desktop's 3.829 GiB limit, the loaded model used about 980 MiB and the two-JVM Compose stack peaked near 1.46 GiB with no OOM-killed containers. Production collapses the worker into the API, leaving additional headroom. Running both JVMs separately adds about 250 MiB and is the first thing to change if the demo ever needs to show queue concurrency for real.
 
 **Two cheaper floors exist, both with caveats.** Oracle Cloud Always Free still runs this - though Oracle silently cut it from 4 OCPU / 24 GiB to 2 OCPU / 12 GiB on 15 June 2026, Always Free ARM capacity is a lottery by region, and idle accounts have been terminated. A spare always-on machine behind a Cloudflare Tunnel is the more dependable $0 option, with free public HTTPS and no port forwarding. Neither is a good bet for a demo linked from a resume, which is what the EUR 5.49 buys.
 
@@ -550,6 +553,6 @@ Flyway already owns migrations, so the old manual `kubectl exec psql` step and a
 | Namespace | 1 | `k8s/namespaces.yaml` |
 | Pull-based worker Deployment | 2 | `k8s/worker-deployment.yaml` |
 | CronJob | 2 | `k8s/cronjob.yaml` |
-| HPA / PDB | 3 | `k8s/hpa.yaml`, `k8s/pdb.yaml` (planned) |
+| HPA / PDB | 3 | `k8s/worker-hpa.yaml`, `k8s/ai-service-pdb.yaml` (EKS exercise only) |
 | Ingress / NetworkPolicy | 5 | Traefik + cert-manager on k3s; ALB + ACM during the EKS exercise |
 | Sidecar / RBAC | 6 | Planned |
