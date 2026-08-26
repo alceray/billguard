@@ -26,6 +26,33 @@ public class ChargeEligibility {
         return !(transaction.matchedOwnTransfer() && transfer);
     }
 
+    /**
+     * A point of sale does not bill again on its own, so one charge there is never a
+     * recurring charge. Costs a real miss: a membership signup seen once waits for its
+     * second charge.
+     */
+    public boolean allowsSingletonPromotion(String pfcPrimary, String pfcDetailed) {
+        String primary = normalized(pfcPrimary);
+        String detailed = normalized(pfcDetailed);
+        for (String pointOfSale : POINT_OF_SALE_PRIMARIES) {
+            if (primary.startsWith(pointOfSale)) {
+                return false;
+            }
+        }
+        return !detailed.contains("BOOKSTORES_AND_NEWSSTANDS");
+    }
+
+    private static final String[] POINT_OF_SALE_PRIMARIES = {
+        "FOOD_AND_DRINK",
+        "GENERAL_MERCHANDISE",
+        "TRANSPORTATION",
+        "TRAVEL",
+        "PERSONAL_CARE",
+        "HOME_IMPROVEMENT",
+        "MEDICAL",
+        "BANK_FEES",
+    };
+
     private String normalized(String value) {
         return value == null ? "" : value.toUpperCase(Locale.ROOT);
     }

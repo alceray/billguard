@@ -95,6 +95,7 @@ public class PlaidRecurringDetectionClient {
             billingCycle(stream.getFrequency()),
             stream.getPredictedNextDate(),
             confidence(status),
+            null,
             detectionState(status),
             categoryRules.categorize(merchant, primary, detailed),
             "rule",

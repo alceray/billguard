@@ -16,16 +16,27 @@ from app.classification_models import (
 from app.config import Settings
 from app.metrics import OLLAMA_ERRORS
 
-PROMPT_VERSION = "recurring-charge-v2"
+PROMPT_VERSION = "recurring-charge-v4"
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You classify recurring consumer charges. Return only the requested JSON schema.
-Do not invent merchants or keys. Categories must come from the supplied enum. Treat a singleton as
-recurring only when its merchant or Plaid category is a strong subscription, bill, or fixed-expense
-signal. Housing means rent, mortgage, landlord, or property management. Finance means paid financial
+SYSTEM_PROMPT = """You classify consumer bank charges. Return only the requested JSON schema.
+Do not invent merchants or keys. Categories must come from the supplied enum.
+
+recurring_signal means this merchant bills the same customer again on a schedule. Judge the
+merchant, not the amount.
+
+confidence means how certain you are that recurring_signal is correct. It is not your certainty
+about the category or the display name. Be certain only when the merchant name or the Plaid
+category names a subscription or a bill. Say you are unsure when it does not.
+
+A grocer, market, cafe, restaurant, bookstore, or fuel stop is other with recurring_signal false,
+however many times it appears.
+
+Housing means rent, mortgage, landlord, or property management. Finance means paid financial
 services, not rent. Shopping_membership requires explicit membership evidence; ordinary retail is
-other. A strong Plaid bill category is a recurring signal even with one transaction. Keep reasoning
-factual and under 25 words. Never generate advice or cancellation prose."""
+other. A strong Plaid bill category is a recurring signal even with one transaction.
+
+Keep reasoning factual and under 25 words. Never generate advice or cancellation prose."""
 
 
 class Classifier:

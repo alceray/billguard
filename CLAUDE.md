@@ -49,6 +49,7 @@ billguard/
 |-- web-app/                  # SvelteKit UI and Auth0 SPA client
 |-- fixtures/plaid/           # Deterministic user_custom Sandbox data
 |-- k8s/                      # Deployments, services, config and secret template
+|-- docs/                     # DEVELOPMENT.md: setup, Auth0/Plaid config, kind, env vars
 |-- docker-compose.yml
 `-- .github/workflows/ci.yml
 ```

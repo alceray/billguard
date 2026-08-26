@@ -269,7 +269,7 @@ class RecurringChargeDetectorIT {
     private DetectedCharge plaidCharge(String merchantKey, String displayName) {
         return new DetectedCharge(
             merchantKey, displayName, displayName, new BigDecimal("12.00"), null, "USD",
-            BillingCycle.MONTHLY, LocalDate.of(2026, 9, 1), new BigDecimal("0.90"), "confirmed",
+            BillingCycle.MONTHLY, LocalDate.of(2026, 9, 1), new BigDecimal("0.90"), null, "confirmed",
             RecurringCategory.SOFTWARE, "rule", null, false, null,
             LocalDate.of(2026, 6, 1), LocalDate.of(2026, 8, 1), null, null);
     }

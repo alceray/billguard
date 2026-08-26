@@ -1,5 +1,5 @@
 # In-cluster Postgres for local kind development.
-# Production uses RDS — this manifest is dev-only.
+# Production uses RDS - this manifest is dev-only.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,14 +42,14 @@ spec:
             limits:
               cpu: "500m"
               memory: "512Mi"
-          # CKAD: liveness probe — postgres-specific check
+          # CKAD: liveness probe - postgres-specific check
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "billguard", "-d", "billguard"]
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
-          # CKAD: readiness probe — only route traffic when DB is accepting connections
+          # CKAD: readiness probe - only route traffic when DB is accepting connections
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "billguard", "-d", "billguard"]

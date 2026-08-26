@@ -34,9 +34,8 @@ const SESSION_ENDING_ERRORS = new Set([
   "missing_refresh_token",
 ]);
 
-const LAST_ACTIVITY_KEY = "billguard.auth.lastActivityAt";
-const INACTIVITY_LIMIT_MS = 7 * 24 * 60 * 60 * 1_000;
-const ACTIVITY_WRITE_INTERVAL_MS = 60 * 1_000;
+// Auth0 owns session lifetime; this key only propagates sign-out across tabs.
+const SESSION_KEY = "billguard.auth.session";
 
 function requiresInteractiveLogin(cause: unknown): boolean {
   if (typeof cause !== "object" || cause === null || !("error" in cause)) {
@@ -56,7 +55,6 @@ function createAuthStore() {
   });
 
   let initPromise: Promise<void> | null = null;
-  let inactivityTimer: number | null = null;
   let trackedClient: Auth0Client | null = null;
   let sessionEnding = false;
 
@@ -87,12 +85,13 @@ function createAuthStore() {
         window.location.search.includes("code=") ||
         window.location.search.includes("error=")
       ) {
-        await client.handleRedirectCallback();
-        handledRedirect = true;
-        writeLastActivity(Date.now());
-      } else if (inactivityExpired()) {
-        await expireInactiveSession(client);
-        return;
+        try {
+          await client.handleRedirectCallback();
+          handledRedirect = true;
+        } finally {
+          // Single-use code: a retry on a spent one fails with "Invalid state".
+          window.history.replaceState({}, "", window.location.pathname);
+        }
       }
 
       const isAuthenticated = await client.isAuthenticated();
@@ -128,9 +127,9 @@ function createAuthStore() {
       });
 
       if (isAuthenticated) {
-        startActivityTracking(client);
+        startSessionSync(client);
       } else {
-        clearLastActivity();
+        clearSessionMarker();
       }
 
       if (handledRedirect) {
@@ -169,8 +168,8 @@ function createAuthStore() {
 
   async function clearLocalSession(client: Auth0Client) {
     await client.logout({ openUrl: false });
-    stopActivityTracking();
-    clearLastActivity();
+    stopSessionSync();
+    clearSessionMarker();
     set({
       client,
       user: null,
@@ -191,12 +190,6 @@ function createAuthStore() {
         "Your sign-in session is unavailable. Sign in again.",
       );
     }
-    if (inactivityExpired()) {
-      await expireInactiveSession(state.client);
-      throw new AuthSessionError(
-        "Your sign-in session expired after 7 days of inactivity.",
-      );
-    }
     try {
       return await state.client.getTokenSilently();
     } catch (cause) {
@@ -214,117 +207,38 @@ function createAuthStore() {
     }
   }
 
-  function readLastActivity(): number | null {
-    const value = window.localStorage.getItem(LAST_ACTIVITY_KEY);
-    if (value === null) return null;
-
-    const timestamp = Number(value);
-    if (!Number.isFinite(timestamp) || timestamp <= 0) {
-      clearLastActivity();
-      return null;
-    }
-    return timestamp;
+  function markSessionActive() {
+    window.localStorage.setItem(SESSION_KEY, "1");
   }
 
-  function writeLastActivity(timestamp: number) {
-    window.localStorage.setItem(LAST_ACTIVITY_KEY, String(timestamp));
+  function clearSessionMarker() {
+    window.localStorage.removeItem(SESSION_KEY);
   }
 
-  function clearLastActivity() {
-    window.localStorage.removeItem(LAST_ACTIVITY_KEY);
-  }
-
-  function inactivityExpired(now = Date.now()): boolean {
-    const lastActivity = readLastActivity();
-    return lastActivity !== null && now - lastActivity >= INACTIVITY_LIMIT_MS;
-  }
-
-  function recordActivity() {
-    const state = get({ subscribe });
-    if (!state.isAuthenticated || !state.client || sessionEnding) return;
-
-    const now = Date.now();
-    const lastActivity = readLastActivity();
-    if (
-      lastActivity !== null &&
-      now - lastActivity < ACTIVITY_WRITE_INTERVAL_MS
-    ) {
-      return;
-    }
-    if (lastActivity !== null && now - lastActivity >= INACTIVITY_LIMIT_MS) {
-      void expireInactiveSession(state.client);
-      return;
-    }
-
-    writeLastActivity(now);
-    scheduleInactivityExpiration(state.client, now);
-  }
-
-  function startActivityTracking(client: Auth0Client) {
-    stopActivityTracking();
+  function startSessionSync(client: Auth0Client) {
+    stopSessionSync();
     trackedClient = client;
-    window.addEventListener("pointerdown", recordActivity);
-    window.addEventListener("keydown", recordActivity);
-    window.addEventListener("focus", recordActivity);
-    window.addEventListener("storage", handleActivityStorageChange);
-
-    const now = Date.now();
-    writeLastActivity(now);
-    scheduleInactivityExpiration(client, now);
+    window.addEventListener("storage", handleSessionStorageChange);
+    markSessionActive();
   }
 
-  function stopActivityTracking() {
-    window.removeEventListener("pointerdown", recordActivity);
-    window.removeEventListener("keydown", recordActivity);
-    window.removeEventListener("focus", recordActivity);
-    window.removeEventListener("storage", handleActivityStorageChange);
+  function stopSessionSync() {
+    window.removeEventListener("storage", handleSessionStorageChange);
     trackedClient = null;
-    if (inactivityTimer !== null) {
-      window.clearTimeout(inactivityTimer);
-      inactivityTimer = null;
-    }
   }
 
-  function handleActivityStorageChange(event: StorageEvent) {
-    if (event.key !== LAST_ACTIVITY_KEY || !trackedClient) {
+  function handleSessionStorageChange(event: StorageEvent) {
+    if (event.key !== SESSION_KEY || !trackedClient || event.newValue) {
       return;
     }
-    if (!event.newValue) {
-      void clearLocalSession(trackedClient);
-      return;
-    }
-    const timestamp = Number(event.newValue);
-    if (Number.isFinite(timestamp) && timestamp > 0) {
-      scheduleInactivityExpiration(trackedClient, timestamp);
-    }
-  }
-
-  function scheduleInactivityExpiration(
-    client: Auth0Client,
-    lastActivity: number,
-  ) {
-    if (inactivityTimer !== null) {
-      window.clearTimeout(inactivityTimer);
-    }
-    const remaining = Math.max(
-      0,
-      lastActivity + INACTIVITY_LIMIT_MS - Date.now(),
-    );
-    inactivityTimer = window.setTimeout(
-      () => void expireInactiveSession(client),
-      remaining,
-    );
-  }
-
-  async function expireInactiveSession(client: Auth0Client) {
-    await endSession(client, true);
+    void clearLocalSession(trackedClient);
   }
 
   async function endSession(client: Auth0Client, redirect: boolean) {
     if (sessionEnding) return;
     sessionEnding = true;
-    stopActivityTracking();
-    clearLastActivity();
+    stopSessionSync();
+    clearSessionMarker();
     set({
       client,
       user: null,

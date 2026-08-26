@@ -1,4 +1,4 @@
-# Non-sensitive configuration — safe to commit.
+# Non-sensitive configuration, safe to commit.
 # Sensitive values (API keys, DB passwords) go in secrets.yaml (git-ignored).
 apiVersion: v1
 kind: ConfigMap
@@ -25,7 +25,7 @@ data:
   # Replace with the public ingress/tunnel URL for webhook delivery.
   PLAID_WEBHOOK_URL: "https://REPLACE_ME/api/webhooks/plaid"
   BILLGUARD_WORKER_ENABLED: "false"
-  # Updated per environment — dev points to in-cluster Postgres
+  # Updated per environment - dev points to in-cluster Postgres
   DATABASE_HOST: "postgres-service"
   DATABASE_PORT: "5432"
   DATABASE_NAME: "billguard"

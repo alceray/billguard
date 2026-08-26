@@ -25,8 +25,8 @@ public class RecurringChargeRepository {
         Object[] parameters = category == null ? new Object[] {userId} : new Object[] {userId, category};
         return jdbcTemplate.query("""
             SELECT id, merchant_key, merchant_name, display_name, amount, previous_amount,
-                   currency, billing_cycle, next_charge_date, confidence_score, detection_state,
-                   category, category_source, amount_changed_at, is_variable_amount,
+                   currency, billing_cycle, next_charge_date, confidence_score, model_confidence,
+                   detection_state, category, category_source, amount_changed_at, is_variable_amount,
                    first_seen_at, last_seen_at, user_override
               FROM recurring_charges
              WHERE user_id = ? AND user_override IS DISTINCT FROM FALSE
@@ -55,8 +55,8 @@ public class RecurringChargeRepository {
     public RecurringChargeResponse findById(UUID userId, UUID id) {
         return jdbcTemplate.query("""
             SELECT id, merchant_key, merchant_name, display_name, amount, previous_amount,
-                   currency, billing_cycle, next_charge_date, confidence_score, detection_state,
-                   category, category_source, amount_changed_at, is_variable_amount,
+                   currency, billing_cycle, next_charge_date, confidence_score, model_confidence,
+                   detection_state, category, category_source, amount_changed_at, is_variable_amount,
                    first_seen_at, last_seen_at, user_override
               FROM recurring_charges WHERE id = ? AND user_id = ?
             """, RecurringChargeRepository::mapCharge, id, userId).stream().findFirst().orElse(null);
@@ -134,6 +134,7 @@ public class RecurringChargeRepository {
             resultSet.getString("merchant_name"), resultSet.getString("display_name"), amount,
             resultSet.getBigDecimal("previous_amount"), resultSet.getString("currency"), cycle,
             resultSet.getObject("next_charge_date", LocalDate.class), resultSet.getBigDecimal("confidence_score"),
+            resultSet.getBigDecimal("model_confidence"),
             resultSet.getString("detection_state"), category, resultSet.getString("category_source"),
             resultSet.getTimestamp("amount_changed_at") == null
                 ? null : resultSet.getTimestamp("amount_changed_at").toInstant(),

@@ -18,6 +18,7 @@
     billing_cycle: string | null;
     next_charge_date: string | null;
     confidence_score: number;
+    model_confidence?: number | null;
     detection_state:
       "confirmed" | "provisional" | "suspected" | "user_confirmed";
     category: string;
@@ -323,6 +324,22 @@
     );
   }
 
+  function percent(value: unknown): string | null {
+    return typeof value === "number" && Number.isFinite(value)
+      ? `${Math.round(value * 100)}%`
+      : null;
+  }
+
+  // A suspected row has no recurrence evidence, so it shows the model's instead.
+  function confidenceLabel(charge: Charge): string {
+    if (charge.detection_state === "suspected") {
+      const match = percent(charge.model_confidence);
+      return match === null ? "seen once" : `${match} match`;
+    }
+    const score = percent(charge.confidence_score);
+    return score === null ? "unscored" : `${score} confidence`;
+  }
+
   function relativeDate(value: string): string {
     const [year, month, day] = value.slice(0, 10).split("-").map(Number);
     if (!year || !month || !day) return "";
@@ -466,8 +483,7 @@
             >
             {#if !isConfirmed(charge)}
               <span class="badge possible-badge">
-                Possible &middot; {Math.round(charge.confidence_score * 100)}%
-                confidence
+                Possible &middot; {confidenceLabel(charge)}
               </span>
             {/if}
             {#if charge.is_variable_amount}<span class="badge"

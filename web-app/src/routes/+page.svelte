@@ -21,11 +21,11 @@
 
     <p class="sub">
       BillGuard connects to your bank, finds recurring charges,<br />
-      and helps you cancel them — in one place.
+      and helps you cancel them - in one place.
     </p>
 
     <button class="cta" on:click={() => auth.login()}>
-      Sign in / Sign up
+      Get started
       <span class="arrow">→</span>
     </button>
 

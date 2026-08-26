@@ -15,6 +15,7 @@ public record DetectedCharge(
     BillingCycle billingCycle,
     LocalDate nextChargeDate,
     BigDecimal confidenceScore,
+    BigDecimal modelConfidence,
     String detectionState,
     RecurringCategory category,
     String categorySource,

@@ -46,16 +46,38 @@ class RecurrenceDetectorTest {
     }
 
     @Test
+    void singletonScoresNoRecurrenceEvidenceAndCarriesModelConfidenceSeparately() {
+        List<DetectionTransaction> single = List.of(
+            transaction("gym", "25.00", LocalDate.of(2026, 8, 1), "City Gym"));
+
+        assertThat(detector.detect(single, Map.of())).isEmpty();
+
+        ModelClassification model = new ModelClassification(
+            "City Gym", RecurringCategory.FITNESS_AND_HEALTH, 0.82, true, "gym membership", "v1");
+
+        assertThat(detector.detect(single, Map.of("gym", model))).singleElement().satisfies(charge -> {
+            assertThat(charge.confidenceScore()).isEqualByComparingTo("0.00");
+            assertThat(charge.modelConfidence()).isEqualByComparingTo("0.82");
+        });
+    }
+
+    @Test
     void knownSingletonIsSuspectedButNoiseIsIgnored() {
+        ModelClassification gym = new ModelClassification(
+            "City Gym", RecurringCategory.FITNESS_AND_HEALTH, 0.82, true, "gym membership", "v1");
+        ModelClassification coffee = new ModelClassification(
+            "Corner Coffee", RecurringCategory.OTHER, 0.40, false, "one-off retail", "v1");
+
         assertThat(detector.detect(List.of(
-            transaction("gym", "25.00", LocalDate.of(2026, 8, 1), "City Gym")), Map.of()))
+            transaction("gym", "25.00", LocalDate.of(2026, 8, 1), "City Gym")), Map.of("gym", gym)))
             .singleElement().satisfies(charge -> {
                 assertThat(charge.detectionState()).isEqualTo("suspected");
                 assertThat(charge.billingCycle()).isNull();
                 assertThat(charge.nextChargeDate()).isNull();
             });
         assertThat(detector.detect(List.of(
-            transaction("coffee", "5.00", LocalDate.of(2026, 8, 1), "Corner Coffee")), Map.of()))
+            transaction("coffee", "5.00", LocalDate.of(2026, 8, 1), "Corner Coffee")),
+            Map.of("coffee", coffee)))
             .isEmpty();
     }
 
@@ -137,6 +159,37 @@ class RecurrenceDetectorTest {
     }
 
     @Test
+    void pointOfSaleSingletonIsRejectedNoMatterWhatTheModelSays() {
+        ModelClassification confident = new ModelClassification(
+            "Merchant", RecurringCategory.SHOPPING_MEMBERSHIP, 0.99, true, "looks recurring", "v4");
+
+        assertThat(detector.detect(List.of(pointOfSale(
+            "local market", "TST*LOCAL MARKET 1842", "FOOD_AND_DRINK", "FOOD_AND_DRINK_RESTAURANT")),
+            Map.of("local market", confident))).isEmpty();
+        assertThat(detector.detect(List.of(pointOfSale(
+            "blue bottle coffee", "BLUE BOTTLE #47", "FOOD_AND_DRINK", "FOOD_AND_DRINK_COFFEE")),
+            Map.of("blue bottle coffee", confident))).isEmpty();
+        assertThat(detector.detect(List.of(pointOfSale("bookstore purchase", "BOOKSTORE PURCHASE",
+            "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS")),
+            Map.of("bookstore purchase", confident))).isEmpty();
+    }
+
+    @Test
+    void lowConfidenceSingletonIsRejectedEvenWhenTheModelClaimsRecurring() {
+        DetectionTransaction retail = transaction(
+            "local market", "47.31", LocalDate.of(2026, 7, 19), "TST*LOCAL MARKET 1842");
+
+        ModelClassification underFloor = new ModelClassification(
+            "Local Market", RecurringCategory.OTHER, 0.59, true, "unclear", "v3");
+        assertThat(detector.detect(List.of(retail), Map.of("local market", underFloor))).isEmpty();
+
+        ModelClassification atFloor = new ModelClassification(
+            "Local Market", RecurringCategory.SOFTWARE, 0.60, true, "billing merchant", "v3");
+        assertThat(detector.detect(List.of(retail), Map.of("local market", atFloor)))
+            .singleElement().extracting(DetectedCharge::detectionState).isEqualTo("suspected");
+    }
+
+    @Test
     void modelCanPromoteAnUnknownSingletonAndSuppliesPromptMetadata() {
         DetectionTransaction transaction = transaction(
             "unknown", "9.99", LocalDate.of(2026, 8, 1), "Opaque Merchant");
@@ -176,5 +229,17 @@ class RecurrenceDetectorTest {
         return new DetectionTransaction(
             UUID.randomUUID(), UUID.randomUUID(), merchantKey, merchant, merchant,
             new BigDecimal(amount), "USD", date, false, null, null, false);
+    }
+
+    private DetectionTransaction pointOfSale(
+        String merchantKey,
+        String merchant,
+        String pfcPrimary,
+        String pfcDetailed
+    ) {
+        return new DetectionTransaction(
+            UUID.randomUUID(), UUID.randomUUID(), merchantKey, merchant, merchant,
+            new BigDecimal("12.00"), "USD", LocalDate.of(2026, 8, 1), false,
+            pfcPrimary, pfcDetailed, false);
     }
 }

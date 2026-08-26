@@ -50,11 +50,11 @@ public class RecurringChargeDetectionRepository {
         jdbcTemplate.update("""
             INSERT INTO recurring_charges (
               user_id, merchant_key, merchant_name, display_name, amount, previous_amount,
-              currency, billing_cycle, next_charge_date, confidence_score, status,
-              detection_state, category, category_source, amount_changed_at,
+              currency, billing_cycle, next_charge_date, confidence_score, model_confidence,
+              status, detection_state, category, category_source, amount_changed_at,
               is_variable_amount, source_transaction_id, first_seen_at, last_seen_at,
               classification_prompt_version, classification_reasoning
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (user_id, merchant_key) DO UPDATE
                SET merchant_name = CASE WHEN recurring_charges.user_override IS NULL
                      THEN EXCLUDED.merchant_name ELSE recurring_charges.merchant_name END,
@@ -72,6 +72,8 @@ public class RecurringChargeDetectionRepository {
                      THEN EXCLUDED.next_charge_date ELSE recurring_charges.next_charge_date END,
                    confidence_score = CASE WHEN recurring_charges.user_override IS NULL
                      THEN EXCLUDED.confidence_score ELSE recurring_charges.confidence_score END,
+                   model_confidence = CASE WHEN recurring_charges.user_override IS NULL
+                     THEN EXCLUDED.model_confidence ELSE recurring_charges.model_confidence END,
                    status = CASE WHEN recurring_charges.user_override IS NULL THEN 'active'
                      ELSE recurring_charges.status END,
                    detection_state = CASE WHEN recurring_charges.user_override IS NULL
@@ -107,7 +109,8 @@ public class RecurringChargeDetectionRepository {
             userId, charge.merchantKey(), charge.merchantName(), charge.displayName(), charge.amount(),
             charge.previousAmount(), charge.currency(),
             charge.billingCycle() == null ? null : charge.billingCycle().value(), charge.nextChargeDate(),
-            charge.confidenceScore(), charge.detectionState(), charge.category().value(),
+            charge.confidenceScore(), charge.modelConfidence(),
+            charge.detectionState(), charge.category().value(),
             charge.categorySource(),
             charge.amountChangedAt() == null ? null : charge.amountChangedAt().atOffset(ZoneOffset.UTC),
             charge.variableAmount(), charge.sourceTransactionId(), charge.firstSeenAt(), charge.lastSeenAt(),

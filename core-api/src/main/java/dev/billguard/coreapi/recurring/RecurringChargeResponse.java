@@ -18,6 +18,7 @@ public record RecurringChargeResponse(
     @JsonProperty("billing_cycle") String billingCycle,
     @JsonProperty("next_charge_date") LocalDate nextChargeDate,
     @JsonProperty("confidence_score") BigDecimal confidenceScore,
+    @JsonProperty("model_confidence") BigDecimal modelConfidence,
     @JsonProperty("detection_state") String detectionState,
     String category,
     @JsonProperty("category_source") String categorySource,

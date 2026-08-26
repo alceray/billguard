@@ -19,6 +19,7 @@ public class RecurrenceDetector {
     private static final BigDecimal AMOUNT_CHANGE_EPSILON = new BigDecimal("0.01");
     // Above 10% coefficient of variation, use a trailing average and suppress price-change alerts.
     private static final double VARIABLE_AMOUNT_CV = 0.10;
+    private static final double MIN_SINGLETON_CONFIDENCE = 0.60;
 
     private final ChargeEligibility eligibility;
     private final CategoryRules categoryRules;
@@ -88,9 +89,11 @@ public class RecurrenceDetector {
         int count = group.transactions().size();
         RecurrenceMetrics metrics = metrics(group);
 
-        boolean singletonSignal = count == 1 && (
-            categoryRules.hasSingletonSignal(latest.merchantLabel(), latest.pfcPrimary(), latest.pfcDetailed())
-                || model != null && model.recurringSignal());
+        boolean singletonSignal = count == 1
+            && eligibility.allowsSingletonPromotion(latest.pfcPrimary(), latest.pfcDetailed())
+            && model != null
+            && model.recurringSignal()
+            && model.confidence() >= MIN_SINGLETON_CONFIDENCE;
         boolean recurringInterval = count >= 2 && metrics.cycle() != null && metrics.intervalRegularity() >= 0.67;
         if (!singletonSignal && !recurringInterval) {
             return null;
@@ -110,20 +113,29 @@ public class RecurrenceDetector {
         BigDecimal amount = metrics.variableAmount()
             ? averageAmount(group.transactions())
             : latest.amount();
-        double intervalScore = metrics.cycle() == null
-            ? 0.35
-            : Math.max(0, 1 - metrics.medianAbsoluteDeviation() / Math.max(1, metrics.medianGapDays()));
+        // One charge has no interval and no variance to measure, so neither scores.
+        double intervalScore = count < 2
+            ? 0
+            : metrics.cycle() == null
+                ? 0.35
+                : Math.max(0, 1 - metrics.medianAbsoluteDeviation() / Math.max(1, metrics.medianGapDays()));
         double countFactor = Math.max(0, Math.min(1, (count - 2) / 4.0));
-        double amountScore = metrics.variableAmount()
-            ? 1
-            : Math.max(0, 1 - metrics.amountCoefficientOfVariation());
+        double amountScore = count < 2
+            ? 0
+            : metrics.variableAmount()
+                ? 1
+                : Math.max(0, 1 - metrics.amountCoefficientOfVariation());
         double confidence = 0.4 * intervalScore + 0.3 * amountScore + 0.3 * countFactor;
 
         return new DetectedCharge(
             group.merchantKey(), latest.merchantLabel(), displayName(latest.merchantLabel(), model),
             amount.setScale(2, RoundingMode.HALF_UP), previous, latest.currency(), metrics.cycle(),
             metrics.cycle() == null ? null : latest.date().plusDays(Math.round(metrics.medianGapDays())),
-            BigDecimal.valueOf(clamp(confidence)).setScale(2, RoundingMode.HALF_UP), state,
+            BigDecimal.valueOf(clamp(confidence)).setScale(2, RoundingMode.HALF_UP),
+            model == null
+                ? null
+                : BigDecimal.valueOf(clamp(model.confidence())).setScale(2, RoundingMode.HALF_UP),
+            state,
             category.value(), category.source(),
             amountChanged ? latest.date().atStartOfDay().toInstant(ZoneOffset.UTC) : null,
             metrics.variableAmount(), latest.id(), group.transactions().getFirst().date(), latest.date(),
