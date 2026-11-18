@@ -1,9 +1,10 @@
 {
-  "prompt_version": "recurring-charge-v2",
-  "evaluated_at": "2026-08-25",
+  "prompt_version": "recurring-charge-v4",
+  "contract_version": "merchant-candidate-v2",
+  "evaluated_at": "2026-08-26",
   "labelled_cases": 5,
-  "rules_fallback_accuracy": 1.0,
   "ollama_model": "gemma3:1b",
-  "ollama_accuracy": 0.6,
+  "ollama_accuracy": 0.8,
+  "unanswered_keys": 0,
   "model_degraded": false
 }

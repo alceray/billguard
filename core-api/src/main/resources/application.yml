@@ -73,3 +73,5 @@ billguard:
   ai:
     service-url: ${AI_SERVICE_URL:http://localhost:8000}
     timeout: ${AI_SERVICE_TIMEOUT:30s}
+  detection:
+    max-classifications-per-run: ${BILLGUARD_DETECTION_MAX_CLASSIFICATIONS_PER_RUN:25}

@@ -152,7 +152,7 @@ public class RecurrenceDetector {
         if (model != null && model.category() != RecurringCategory.OTHER) {
             return new CategoryDecision(model.category(), "model");
         }
-        return new CategoryDecision(RecurringCategory.OTHER, "model");
+        return new CategoryDecision(RecurringCategory.OTHER, "rule");
     }
 
     private String displayName(String merchant, ModelClassification model) {

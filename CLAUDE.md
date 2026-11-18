@@ -24,7 +24,7 @@ Phase 3 recurring-charge detection is implemented; real Plaid Sandbox and live-c
 | Containers | Docker multi-stage builds | Non-root UID/GID 1001 |
 | Orchestration | Kubernetes | kind locally, k3s on one small VPS in production; EKS as a time-boxed exercise. Manifests in `k8s/` |
 | CI | GitHub Actions | Java verify, Python lint/type/test, web app check/build |
-| AI/LLM | Ollama, 1-1.5B quantized | Classification only, never generation. Runs on the 4 GiB host; no API key required. `LOCAL_LLM_MODE=false` selects deterministic rules; hosted OpenAI support is not implemented |
+| AI/LLM | Ollama, 1-1.5B quantized | Classification only, never generation. Runs on the 4 GiB host; no API key required. `LOCAL_LLM_MODE=false` skips model output and Java uses deterministic rules; hosted OpenAI support is not implemented |
 | Banking | Plaid | Link, sync, signed webhooks, and Sandbox fixture implemented in Phase 2 |
 
 ## Project structure
@@ -43,7 +43,7 @@ billguard/
 |   |   `-- recurring/        # Auth-scoped unified charges and feedback metrics
 |   `-- src/main/resources/db/migration/ # Flyway schema history
 |-- ai-service/
-|   |-- app/                  # FastAPI contract, Ollama adapter, fallback rules, metrics
+|   |-- app/                  # FastAPI contract, Ollama adapter, classifier metadata, metrics
 |   |-- evals/                # Labelled classification cases
 |   `-- tests/                # ASGI contract and degradation tests
 |-- web-app/                  # SvelteKit UI and Auth0 SPA client
@@ -105,7 +105,8 @@ billguard/
 | `AI_SERVICE_URL` | ConfigMap | Worker-to-Python classification path |
 | `APP_ENV`, `LOCAL_LLM_MODE` | ConfigMap | AI service mode |
 | `OPENAI_API_KEY` | Secret | Reserved for a future hosted provider; currently unused |
-| `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_KEEP_ALIVE` | Environment | Local classifier endpoint, pinned model, and unload policy |
+| `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_NUM_CTX` | Environment | Local classifier endpoint, pinned model, unload policy, and context size |
+| `BILLGUARD_DETECTION_MAX_CLASSIFICATIONS_PER_RUN` | ConfigMap/Compose | Maximum cold-cache model classifications in one detection run |
 | `PLAID_CLIENT_ID`, `PLAID_SECRET` | Secret | Plaid API authentication |
 | `PLAID_ENV`, `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES` | ConfigMap/Compose | Plaid Link environment and scope |
 | `PLAID_WEBHOOK_URL` | ConfigMap/Compose | Public signed-webhook endpoint attached to Link tokens |

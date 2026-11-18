@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.classification_models import ClassifyRequest
-from app.classifier import PROMPT_VERSION, Classifier
+from app.classifier import CONTRACT_VERSION, PROMPT_VERSION, Classifier
 from app.config import Settings
 
 ROOT = Path(__file__).parents[1]
@@ -17,15 +17,10 @@ RESULTS_PATH = ROOT / "evals" / "results.json"
 def request_for(cases: list[dict[str, str]]) -> ClassifyRequest:
     return ClassifyRequest.model_validate(
         {
-            "streams": [],
-            "singletons": [
+            "candidates": [
                 {
                     "merchant_key": f"case-{index}",
                     "merchant_name": case["merchant"],
-                    "transaction_count": 1,
-                    "amounts": ["9.99"],
-                    "dates": ["2026-08-01"],
-                    "currency": "USD",
                     "pfc_primary": None,
                     "pfc_detailed": case["pfc"],
                 }
@@ -45,18 +40,29 @@ def accuracy(cases: list[dict[str, str]], categories: list[str]) -> float:
 async def evaluate() -> dict[str, Any]:
     cases: list[dict[str, str]] = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     request = request_for(cases)
-    rules = await Classifier(Settings(local_llm_mode=False)).classify(request)
     model = await Classifier(Settings(local_llm_mode=True)).classify(request)
+    results = {item.merchant_key: item.category for item in model.results}
 
+    # An unanswered key is not a wrong answer; scoring it as one turns an unreachable
+    # Ollama into a recorded accuracy regression.
+    answered = [
+        (case, results[f"case-{index}"])
+        for index, case in enumerate(cases)
+        if f"case-{index}" in results
+    ]
     return {
         "prompt_version": PROMPT_VERSION,
+        "contract_version": CONTRACT_VERSION,
         "evaluated_at": datetime.now(UTC).date().isoformat(),
         "labelled_cases": len(cases),
-        "rules_fallback_accuracy": accuracy(cases, [item.category for item in rules.results]),
         "ollama_model": model.model,
-        "ollama_accuracy": None
-        if model.degraded
-        else accuracy(cases, [item.category for item in model.results]),
+        "ollama_accuracy": (
+            accuracy([case for case, _ in answered], [category for _, category in answered])
+            if answered
+            else None
+        ),
+        "answered_keys": len(answered),
+        "unanswered_keys": len(cases) - len(answered),
         "model_degraded": model.degraded,
     }
 
@@ -71,9 +77,13 @@ async def main() -> None:
     rendered = json.dumps(result, indent=2) + "\n"
     print(rendered, end="")
     if args.write_results:
+        # results.json is committed, so it must never record a run that did not happen.
+        if result["answered_keys"] == 0:
+            raise SystemExit(
+                "Refusing to write results.json: the model answered nothing. "
+                "Start Ollama and re-run."
+            )
         RESULTS_PATH.write_text(rendered, encoding="utf-8")
-    if result["rules_fallback_accuracy"] != 1:
-        raise SystemExit("Rules fixture accuracy regressed")
     if args.require_model and result["model_degraded"]:
         raise SystemExit("Ollama did not return a complete structured response")
 

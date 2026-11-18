@@ -19,6 +19,8 @@ data:
   OLLAMA_MODEL: "gemma3:1b"
   # Unload after each batch to return memory on the small single-node cluster.
   OLLAMA_KEEP_ALIVE: "0"
+  OLLAMA_NUM_CTX: "4096"
+  BILLGUARD_DETECTION_MAX_CLASSIFICATIONS_PER_RUN: "25"
   PLAID_ENV: "sandbox"
   PLAID_PRODUCTS: "transactions"
   PLAID_COUNTRY_CODES: "US"

@@ -39,10 +39,24 @@ class RecurrenceDetectorTest {
             assertThat(charge.detectionState()).isEqualTo("confirmed");
             assertThat(charge.billingCycle()).isEqualTo(BillingCycle.MONTHLY);
             assertThat(charge.category()).isEqualTo(RecurringCategory.STREAMING);
+            assertThat(charge.categorySource()).isEqualTo("rule");
+            assertThat(charge.modelConfidence()).isNull();
         });
         assertThat(two).singleElement().extracting(DetectedCharge::detectionState)
             .isEqualTo("provisional");
         assertThat(two.getFirst().confidenceScore()).isLessThan(three.getFirst().confidenceScore());
+    }
+
+    @Test
+    void unknownUnclassifiedGroupUsesRuleSourceAndNoModelMetadata() {
+        List<DetectionTransaction> charges = monthly(3, "Unknown Club", "10.00");
+
+        assertThat(detector.detect(charges, Map.of())).singleElement().satisfies(charge -> {
+            assertThat(charge.category()).isEqualTo(RecurringCategory.OTHER);
+            assertThat(charge.categorySource()).isEqualTo("rule");
+            assertThat(charge.modelConfidence()).isNull();
+            assertThat(charge.promptVersion()).isNull();
+        });
     }
 
     @Test

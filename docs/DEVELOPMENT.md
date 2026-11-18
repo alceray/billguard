@@ -292,9 +292,11 @@ The HPA targets 70% CPU with 1-4 workers. The PDB protects the classifier/Ollama
 | `FRONTEND_URL`                                    | Core API                   | Allowed CORS origin; defaults to `http://localhost:5173`           |
 | `PORT`                                            | Core API                   | Defaults to `3001`                                                 |
 | `SPRING_PROFILES_ACTIVE`                          | Core API                   | Use `dev` locally and `prod` in Kubernetes                         |
-| `LOCAL_LLM_MODE`                                  | AI service                 | Defaults to `true`; `false` uses deterministic rules only          |
+| `LOCAL_LLM_MODE`                                  | AI service                 | Defaults to `true`; `false` skips model output so Java rules apply  |
 | `OLLAMA_BASE_URL`                                 | AI service                 | Ollama endpoint; internal Compose/Kubernetes networking by default |
 | `OLLAMA_MODEL`, `OLLAMA_KEEP_ALIVE`               | AI service                 | Defaults to `gemma3:1b` and immediate unload (`0`)                 |
+| `OLLAMA_NUM_CTX`                                  | AI service                 | Explicit Ollama context window; defaults to `4096`                 |
+| `BILLGUARD_DETECTION_MAX_CLASSIFICATIONS_PER_RUN` | Core API/worker            | Cold-cache inference cap; defaults to `25`                         |
 | `OPENAI_API_KEY`                                  | AI service                 | Reserved for a future hosted-model switch; currently unused        |
 | `AI_SERVICE_URL`                                  | Core API/worker            | Internal FastAPI classifier URL                                    |
 | `PLAID_CLIENT_ID`, `PLAID_SECRET`                 | Core API/worker            | Plaid application credentials                                      |

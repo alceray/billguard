@@ -72,6 +72,11 @@ spec:
                 configMapKeyRef:
                   name: billguard-config
                   key: OLLAMA_KEEP_ALIVE
+            - name: OLLAMA_NUM_CTX
+              valueFrom:
+                configMapKeyRef:
+                  name: billguard-config
+                  key: OLLAMA_NUM_CTX
           # FastAPI only shapes classifier requests; Ollama owns model memory.
           resources:
             requests:

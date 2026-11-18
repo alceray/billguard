@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma3:1b"
     ollama_keep_alive: str = "0"
     ollama_timeout_seconds: float = 25.0
+    ollama_num_ctx: int = 4096
 
 
 @lru_cache

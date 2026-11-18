@@ -99,7 +99,6 @@
   let selectedFilter = "";
   let search = "";
   let loading = true;
-  let analyzing = false;
   let updating = "";
   let loadSequence = 0;
   let destroyed = false;
@@ -163,18 +162,15 @@
         return;
       }
 
-      analyzing = true;
       const status = await waitForAnalysis(waitingForFirstSync);
       if (!destroyed && status === "done") await load();
       if (!destroyed && status === "failed") {
         notify.error(
-          "Automatic recurring-charge analysis failed. Try Analyze now.",
+          "Automatic recurring-charge analysis failed. It will retry after the next sync.",
         );
       }
     } catch {
       // The page remains usable when background-status polling is unavailable.
-    } finally {
-      if (!destroyed) analyzing = false;
     }
   }
 
@@ -202,32 +198,6 @@
       }
     }
     return false;
-  }
-
-  async function analyze() {
-    analyzing = true;
-    try {
-      await api.post<{ enqueued: boolean }>(
-        "/api/recurring-charges/detect",
-        {},
-      );
-      const status = await waitForAnalysis(false);
-      if (status === "failed") {
-        throw new Error("We couldn't complete the analysis. Please try again.");
-      }
-      if (status === "timeout") {
-        throw new Error(
-          "Analysis is taking longer than expected. Please try again shortly.",
-        );
-      }
-      if (await load()) {
-        notify.success("Recurring-charge analysis complete.");
-      }
-    } catch (value) {
-      notify.error(message(value, "Could not analyze recurring charges."));
-    } finally {
-      analyzing = false;
-    }
   }
 
   async function waitForAnalysis(
@@ -380,14 +350,6 @@
         them.
       </p>
     </div>
-    <button
-      class="primary"
-      type="button"
-      disabled={analyzing}
-      on:click={analyze}
-    >
-      {analyzing ? "Analyzing..." : "Analyze now"}
-    </button>
   </header>
 
   <section class="summary" aria-label="Confirmed recurring spending">
@@ -589,7 +551,6 @@
     color: var(--text-muted);
     font-size: 12px;
   }
-  .primary,
   .secondary,
   select {
     border: 1px solid var(--border);
@@ -598,11 +559,6 @@
     cursor: pointer;
     font-family: var(--font-sans);
     padding: 8px 12px;
-  }
-  .primary {
-    background: var(--accent);
-    color: var(--accent-contrast);
-    font-weight: 650;
   }
   .secondary,
   select {

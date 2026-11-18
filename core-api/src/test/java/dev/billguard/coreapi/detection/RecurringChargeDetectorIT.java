@@ -13,6 +13,7 @@ import dev.billguard.coreapi.recurring.RecurringChargePatchRequest;
 import dev.billguard.coreapi.recurring.RecurringChargeService;
 import dev.billguard.coreapi.common.HttpException;
 import dev.billguard.coreapi.plaid.PlaidGatewayException;
+import dev.billguard.coreapi.detection.CachedClassificationService.ClassificationResolution;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,7 +58,7 @@ class RecurringChargeDetectorIT {
     private RecurringChargeService recurringChargeService;
 
     @MockitoBean
-    private AiClassificationClient aiClient;
+    private CachedClassificationService classificationService;
 
     @MockitoBean
     private PlaidRecurringDetectionClient plaidClient;
@@ -67,10 +68,11 @@ class RecurringChargeDetectorIT {
 
     @BeforeEach
     void setUp() {
-        when(aiClient.classify(anyList())).thenReturn(Map.of());
+        when(classificationService.classify(anyList())).thenReturn(
+            new ClassificationResolution(Map.of(), 0, 0, 0, false));
         when(plaidClient.detect(any(UUID.class))).thenReturn(List.of());
         jdbcTemplate.execute(
-            "TRUNCATE job_queue, recurring_charges, transactions, accounts, plaid_items, users CASCADE");
+            "TRUNCATE job_queue, merchant_classifications, recurring_charges, transactions, accounts, plaid_items, users CASCADE");
         userId = UUID.randomUUID();
         accountId = UUID.randomUUID();
         jdbcTemplate.update(
@@ -99,6 +101,37 @@ class RecurringChargeDetectorIT {
         assertThat(jdbcTemplate.queryForObject(
             "SELECT detection_state FROM recurring_charges WHERE user_id = ?", String.class, userId))
             .isEqualTo("confirmed");
+    }
+
+    @Test
+    void laterModelResultUpgradesTheSameAutomaticCharge() {
+        insertMonthly("unknown club", "UNKNOWN CLUB", "10.00");
+
+        detectionService.detectUser(userId);
+        UUID chargeId = jdbcTemplate.queryForObject(
+            "SELECT id FROM recurring_charges WHERE user_id = ?", UUID.class, userId);
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT model_confidence FROM recurring_charges WHERE id = ?",
+            BigDecimal.class, chargeId)).isNull();
+
+        ModelClassification classification = new ModelClassification(
+            "Unknown Club Plus", RecurringCategory.SOFTWARE, 0.91, true,
+            "Recurring software membership", "recurring-charge-v4");
+        when(classificationService.classify(anyList())).thenReturn(
+            new ClassificationResolution(
+                Map.of("unknown club", classification), 0, 1, 0, false));
+
+        detectionService.detectUser(userId);
+
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT id FROM recurring_charges WHERE user_id = ?", UUID.class, userId))
+            .isEqualTo(chargeId);
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT display_name FROM recurring_charges WHERE id = ?", String.class, chargeId))
+            .isEqualTo("Unknown Club Plus");
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT model_confidence FROM recurring_charges WHERE id = ?",
+            BigDecimal.class, chargeId)).isEqualByComparingTo("0.91");
     }
 
     @Test
@@ -200,7 +233,7 @@ class RecurringChargeDetectorIT {
             SELECT display_name FROM recurring_charges
              WHERE user_id = ? AND merchant_key = 'adobe'
             """, String.class, userId)).isEqualTo("Adobe");
-        verify(aiClient).classify(argThat(List::isEmpty));
+        verify(classificationService).classify(argThat(List::isEmpty));
 
         when(plaidClient.detect(userId)).thenReturn(List.of());
         assertThat(detectionService.detectUser(userId)).isEqualTo(1);
